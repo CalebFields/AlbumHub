@@ -1,5 +1,4 @@
 import os
-import time
 import base64
 import urllib.request
 import requests
@@ -7,13 +6,11 @@ from dotenv import load_dotenv
 from html import unescape
 
 class DiscogsClient:
-    def __init__(self, api_delay=1.5, logger=None):
+    def __init__(self, logger=None):
         """
-        api_delay: seconds between calls
         logger: function taking a single string argument for logging (e.g. GUI log_message)
         """
         load_dotenv()
-        self.api_delay = api_delay
         self.key    = os.getenv('DISCOGS_KEY')
         self.secret = os.getenv('DISCOGS_SECRET')
         if not self.key or not self.secret:
@@ -109,7 +106,6 @@ class DiscogsClient:
         try:
             release = self.fetch_discogs_release(artist, title, year)
             if not release:
-                # Log to GUI that this album was not found
                 self.logger(f"Could not find '{artist} - {title}' on Discogs.")
                 return album
 
@@ -118,6 +114,5 @@ class DiscogsClient:
             return album
 
         except Exception as e:
-            # catch anything unexpected
             self.logger(f"Unexpected error enriching '{artist} - {title}': {e}")
             return album
