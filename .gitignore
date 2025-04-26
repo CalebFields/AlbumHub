@@ -398,7 +398,3 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
-
-# .gitignore
-.env
-config/.env
