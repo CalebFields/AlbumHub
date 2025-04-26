@@ -1,10 +1,10 @@
-# gui/ranker_tab.py
-
 import tkinter as tk
 from tkinter import ttk, messagebox
+from tkinter.font import Font
 import base64
 import io
 import re
+import random
 from PIL import Image, ImageTk
 
 class RankerTab:
@@ -12,8 +12,8 @@ class RankerTab:
         self.app = app
         self.root = app.root
         self.notebook = notebook
-        # Keep PhotoImage refs alive
-        self._photo_refs = []
+        self._photo_refs = []  # keep PhotoImage refs alive
+        self.bold_font = Font(self.root, weight="bold")
 
     def setup_ranker_tab(self):
         try:
@@ -26,7 +26,9 @@ class RankerTab:
             self.setup_ranker_controls(main)
             self.setup_filter_controls(main)
             self.setup_comparison_interface(main)
-            self.setup_progress_display(main)
+
+            # hide comparison (and progress) until start
+            self.comparison_frame.pack_forget()
 
             self.reset_ranking_state()
             self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
@@ -52,57 +54,82 @@ class RankerTab:
                             command=self.update_filter_combo).pack(side=tk.LEFT, padx=5)
         self.filter_value = tk.StringVar()
         self.filter_combo = ttk.Combobox(frm, textvariable=self.filter_value,
-                                         state='disabled', width=20, style='TCombobox')
+                                         state='disabled', width=20)
         self.filter_combo.pack(side=tk.LEFT, padx=5)
         ttk.Button(frm, text="Apply Filter", command=self.apply_ranking_filter).pack(side=tk.LEFT, padx=5)
         self.update_filter_combo()
 
     def setup_comparison_interface(self, parent):
-        frame = ttk.LabelFrame(parent, text="Which album do you prefer?", style='TFrame')
-        frame.pack(fill=tk.BOTH, expand=True, pady=(0,20))
-        self.album1_image = ttk.Label(frame)
-        self.album1_image.pack(side=tk.LEFT, expand=True, padx=10, pady=10)
-        self.album1_info = ttk.Label(frame, text="Album 1 info will appear here",
-                                     style='TLabel', wraplength=300)
-        self.album1_info.pack(side=tk.LEFT, padx=10)
-        self.choose_album1 = ttk.Button(frame, text="Choose Album 1",
-                                        command=lambda: self.record_choice('L'), state=tk.DISABLED)
-        self.choose_album1.pack(side=tk.LEFT, padx=10)
-        self.album2_image = ttk.Label(frame)
-        self.album2_image.pack(side=tk.RIGHT, expand=True, padx=10, pady=10)
-        self.album2_info = ttk.Label(frame, text="Album 2 info will appear here",
-                                     style='TLabel', wraplength=300)
-        self.album2_info.pack(side=tk.RIGHT, padx=10)
-        self.choose_album2 = ttk.Button(frame, text="Choose Album 2",
-                                        command=lambda: self.record_choice('R'), state=tk.DISABLED)
-        self.choose_album2.pack(side=tk.RIGHT, padx=10)
+        # Comparison + progress area: hidden until start
+        self.comparison_frame = ttk.Frame(parent, style='TFrame')
+        self.comparison_frame.pack(fill=tk.BOTH, expand=True, pady=(0,20))
+        # allow both columns/rows to expand
+        self.comparison_frame.columnconfigure((0,1), weight=1)
+        self.comparison_frame.rowconfigure((0,), weight=3)
+        self.comparison_frame.rowconfigure((1,), weight=1)
+        self.comparison_frame.rowconfigure((2,), weight=0)
 
-    def setup_progress_display(self, parent):
-        frame = ttk.Frame(parent, style='TFrame')
-        frame.pack(fill=tk.X, pady=(0,10))
+        # Left album button + image
+        self.album1_btn = ttk.Button(self.comparison_frame, command=lambda: self.record_choice('L'))
+        self.album1_btn.grid(row=0, column=0, sticky='nsew', padx=10, pady=10)
+        # Left album text area
+        root_bg = self.root.cget('bg')
+        self.album1_info = tk.Text(
+            self.comparison_frame,
+            wrap='word',
+            height=4,
+            bd=0,
+            bg=root_bg,
+            highlightthickness=0,
+            relief='flat'
+        )
+        self.album1_info.grid(row=1, column=0, pady=(0,5), padx=10, sticky='nsew')
+        # configure tag colors: artist, title, rating
+        self.album1_info.tag_configure('artist', foreground='#81a1c1', font=self.bold_font)
+        self.album1_info.tag_configure('title',  foreground='#eceff4')
+        self.album1_info.tag_configure('rating', foreground='#a3be8c')
+        self.album1_info.config(state='disabled')
+
+        # Right album button + image
+        self.album2_btn = ttk.Button(self.comparison_frame, command=lambda: self.record_choice('R'))
+        self.album2_btn.grid(row=0, column=1, sticky='nsew', padx=10, pady=10)
+        # Right album text area
+        self.album2_info = tk.Text(
+            self.comparison_frame,
+            wrap='word',
+            height=4,
+            bd=0,
+            bg=root_bg,
+            highlightthickness=0,
+            relief='flat'
+        )
+        self.album2_info.grid(row=1, column=1, pady=(0,5), padx=10, sticky='nsew')
+        # same tag configuration
+        self.album2_info.tag_configure('artist', foreground='#81a1c1', font=self.bold_font)
+        self.album2_info.tag_configure('title',  foreground='#eceff4')
+        self.album2_info.tag_configure('rating', foreground='#a3be8c')
+        self.album2_info.config(state='disabled')
+
+        # Progress bar under comparisons
+        prog_frame = ttk.Frame(self.comparison_frame)
+        prog_frame.grid(row=2, column=0, columnspan=2, pady=(10,0), sticky='ew', padx=10)
         self.progress_var = tk.StringVar(value='Ready')
-        ttk.Label(frame, textvariable=self.progress_var, style='TLabel').pack(side=tk.LEFT)
-        self.progress_bar = ttk.Progressbar(frame, orient=tk.HORIZONTAL, mode='determinate')
+        ttk.Label(prog_frame, textvariable=self.progress_var).pack(side=tk.LEFT)
+        self.progress_bar = ttk.Progressbar(prog_frame, orient=tk.HORIZONTAL, mode='determinate')
         self.progress_bar.pack(side=tk.RIGHT, fill=tk.X, expand=True)
 
     def reset_ranking_state(self):
         self.start_button['state'] = tk.NORMAL
         self.save_button['state'] = tk.DISABLED
-        self.choose_album1['state'] = tk.DISABLED
-        self.choose_album2['state'] = tk.DISABLED
-        self.album1_image.config(image='')
-        self.album2_image.config(image='')
-        self.album1_info.config(text='Album 1 info will appear here')
-        self.album2_info.config(text='Album 2 info will appear here')
         self.progress_var.set('Ready')
         self.progress_bar['value'] = 0
+        self._photo_refs.clear()
 
     def update_filter_combo(self):
         f = self.filter_type.get()
         cur = self.app.database.conn.cursor()
         opts = []
-        if f == 'all':
-            opts = ['All']
+        if f == 'all': opts = ['All']
         elif f == 'artist':
             cur.execute("SELECT DISTINCT Artist FROM albums")
             opts = sorted(r[0] for r in cur.fetchall() if r[0])
@@ -110,15 +137,11 @@ class RankerTab:
             cur.execute("SELECT Genres FROM albums")
             gs = set()
             for (g,) in cur.fetchall():
-                if g:
-                    for p in g.split(','): gs.add(p.strip())
+                for p in (g or '').split(','): gs.add(p.strip())
             opts = sorted(gs)
         elif f == 'decade':
             cur.execute("SELECT Release_Date FROM albums")
-            ds = set()
-            for (d,) in cur.fetchall():
-                m = re.search(r"(\d{4})", str(d or ''))
-                if m: ds.add(f"{int(m.group(1))//10*10}s")
+            ds = {f"{int(m.group(1))//10*10}s" for (d,) in cur.fetchall() if (m:=re.search(r"(\d{4})", str(d)))}
             opts = sorted(ds)
         self.filter_combo['values'] = opts
         self.filter_combo.config(state='readonly' if opts else 'disabled')
@@ -130,7 +153,10 @@ class RankerTab:
 
     def start_ranking_game(self):
         self.reset_ranking_state()
-        # fetch
+        self.start_button['state'] = tk.DISABLED
+        self.comparison_frame.pack(fill=tk.BOTH, expand=True, pady=(0,20))
+
+        # fetch/filter
         cur = self.app.database.conn.cursor()
         where, prm = [], []
         ft, fv = self.filter_type.get(), self.filter_value.get()
@@ -139,73 +165,96 @@ class RankerTab:
         if ft=='decade' and fv!='All':
             sd=int(fv[:-1]); ed=sd+9
             where.append("CAST(substr(Release_Date,1,4)AS INT) BETWEEN ? AND ?"); prm.extend([sd,ed])
-        sql="SELECT DiscogsID,CoverArt,Artist,Title FROM albums"
-        if where: sql+=" WHERE "+" AND ".join(where)
-        rows=cur.execute(sql,prm).fetchall()
-        if not rows: messagebox.showwarning("No Albums","No albums found"); return
-        # init
-        self.album_graph={rid:{'cover':cov,'artist':art,'title':tit} for rid,cov,art,tit in rows}
-        ids=[rid for rid,_,_,_ in rows]
-        self.merge_queue=[[i] for i in ids]
+        sql="SELECT DiscogsID,CoverArt,Artist,Title,Rating FROM albums"
+        if where: sql += " WHERE " + " AND ".join(where)
+        rows = cur.execute(sql, prm).fetchall()
+        if not rows:
+            messagebox.showwarning("No Albums","No albums found")
+            return
+        try: rows = sorted(rows, key=lambda r: float(r[4] or 0), reverse=True)
+        except: pass
+        ids = [r[0] for r in rows]
+        random.shuffle(ids)
+
+        self.total_comparisons = len(ids) - 1
+        self.comparisons_done = 0
+        self.progress_bar.config(maximum=self.total_comparisons)
+        self.progress_var.set(f"0/{self.total_comparisons} completed")
+
+        self.album_graph = {r[0]: {'cover':r[1],'artist':r[2],'title':r[3],'rating':r[4]} for r in rows}
+        self.merge_queue = [[i] for i in ids]
         self.next_merge()
         self.show_next_pair()
 
     def next_merge(self):
-        if len(self.merge_queue)>1:
-            self.left=self.merge_queue.pop(0)
-            self.right=self.merge_queue.pop(0)
-            self.merged=[]
-            self.li=0; self.ri=0
+        if len(self.merge_queue) > 1:
+            self.left = self.merge_queue.pop(0)
+            self.right = self.merge_queue.pop(0)
+            self.merged = []
+            self.li = self.ri = 0
         else:
-            self.sorted_final=self.merge_queue[0]
+            self.sorted_final = self.merge_queue[0]
 
     def show_next_pair(self):
-        if hasattr(self,'sorted_final'):
-            self.save_button['state']=tk.NORMAL
-            self.display_ranking_results(); return
-        # compare left[li] vs right[ri]
-        lid=self.left[self.li]; rid=self.right[self.ri]
-        for data,widget,info in [
-            (self.album_graph[lid], self.album1_image, self.album1_info),
-            (self.album_graph[rid], self.album2_image, self.album2_info)
+        if hasattr(self, 'sorted_final'):
+            self.save_button['state'] = tk.NORMAL
+            self.display_ranking_results()
+            return
+
+        lid, rid = self.left[self.li], self.right[self.ri]
+        for btn, info, idx in [
+            (self.album1_btn, self.album1_info, lid),
+            (self.album2_btn, self.album2_info, rid)
         ]:
-            widget.config(image='')
-            if data.get('cover'):
+            data = self.album_graph[idx]
+
+            # update image on button
+            if img_data := data.get('cover'):
                 try:
-                    img=Image.open(io.BytesIO(base64.b64decode(data['cover'])))
-                    img.thumbnail((150,150))
-                    tkimg=ImageTk.PhotoImage(img); widget.config(image=tkimg)
+                    img = Image.open(io.BytesIO(base64.b64decode(img_data)))
+                    img.thumbnail((350,350))
+                    tkimg = ImageTk.PhotoImage(img)
+                    btn.config(image=tkimg)
                     self._photo_refs.append(tkimg)
-                except: pass
-            info.config(text=f"{data['artist']} - {data['title']}")
-        self.choose_album1['state']=tk.NORMAL; self.choose_album2['state']=tk.NORMAL
+                except:
+                    btn.config(image='')
+            else:
+                    btn.config(image='')
+
+            # update text with colored tags
+            info.config(state='normal')
+            info.delete('1.0', tk.END)
+            info.insert('end', data['artist'] + '\n', 'artist')
+            info.insert('end', data['title'] + '\n', 'title')
+            info.insert('end', f"Rating: {data['rating']}", 'rating')
+            info.config(state='disabled')
+
+        self.comparisons_done += 1
+        self.progress_bar['value'] = self.comparisons_done
+        self.progress_var.set(f"{self.comparisons_done}/{self.total_comparisons} completed")
 
     def record_choice(self, choice):
-        if choice=='L':
-            self.merged.append(self.left[self.li]); self.li+=1
-        else:
-            self.merged.append(self.right[self.ri]); self.ri+=1
-        # exhausted one side?
-        if self.li==len(self.left) or self.ri==len(self.right):
+        if choice == 'L': self.merged.append(self.left[self.li]); self.li += 1
+        else:             self.merged.append(self.right[self.ri]); self.ri += 1
+        if self.li == len(self.left) or self.ri == len(self.right):
             self.merged.extend(self.left[self.li:]); self.merged.extend(self.right[self.ri:])
             self.merge_queue.append(self.merged)
             self.next_merge()
-        self.choose_album1['state']=tk.DISABLED; self.choose_album2['state']=tk.DISABLED
         self.show_next_pair()
 
     def display_ranking_results(self):
-        win=tk.Toplevel(self.root); win.title("Your Rankings")
-        tv=ttk.Treeview(win,columns=('Album',),show='headings');
-        tv.heading('Album',text='Album'); tv.pack(fill=tk.BOTH,expand=True)
-        for idx,rid in enumerate(self.sorted_final,1):
+        win = tk.Toplevel(self.root); win.title("Your Rankings")
+        tv = ttk.Treeview(win, columns=('Album',), show='headings'); tv.heading('Album', text='Album'); tv.pack(fill=tk.BOTH, expand=True)
+        for idx, rid in enumerate(self.sorted_final,1):
             a=self.album_graph[rid]; name=f"{idx}. {a['artist']} - {a['title']}"
             tv.insert('', 'end', values=(name,))
-        ttk.Button(win,text="Close",command=win.destroy).pack(pady=10)
+        ttk.Button(win, text="Close", command=win.destroy).pack(pady=10)
 
     def save_ranking_results(self):
-        # optional CSV export
+        # TODO: implement CSV export
         pass
 
-    def on_tab_changed(self,event):
-        cur=event.widget.nametowidget(event.widget.select())
-        if cur is self.ranker_tab: self.reset_ranking_state()
+    def on_tab_changed(self, event):
+        cur = event.widget.nametowidget(event.widget.select())
+        if cur is self.ranker_tab:
+            self.reset_ranking_state()

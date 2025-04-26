@@ -187,8 +187,12 @@ class ImportTab:
                 kind, *data = self.processing_queue.get_nowait()
                 if kind == 'message':
                     msg, = data
+                    # Were we already at the bottom?
+                    at_bottom = self.log_text.yview()[1] >= 0.999
                     self.log_text.insert(tk.END, msg + "\n")
-                    self.log_text.see(tk.END)
+                    # Only auto-scroll if the user was already looking at the tail
+                    if at_bottom:
+                        self.log_text.see(tk.END)
                     if 'Processing:' in msg:
                         self.status_var.set(msg.split('] ')[-1])
                 elif kind == 'error':
