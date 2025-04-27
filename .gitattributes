@@ -1,13 +1,11 @@
-# Mark everything as binary by default (block Linguist detection)
-* binary
+# By default, prevent files from being counted by Linguist
+* linguist-detectable=false
 
-# Explicitly allow important file types as text
-*.txt text
-*.html text
-*.htm text
-*.csv text
-*.py text
-
-# Explicitly allow README and LICENSE
-README.md text
-LICENSE text
+# Allow these specific file types to be detected normally
+*.py linguist-detectable=true
+*.html linguist-detectable=true
+*.htm linguist-detectable=true
+*.csv linguist-detectable=true
+*.txt linguist-detectable=true
+README.md linguist-detectable=true
+LICENSE linguist-detectable=true
