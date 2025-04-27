@@ -1,2 +1,13 @@
-# Annoying html linguist bug
-*.html -linguist-detectable
+# Mark everything as binary by default (block Linguist detection)
+* binary
+
+# Explicitly allow important file types as text
+*.txt text
+*.html text
+*.htm text
+*.csv text
+*.py text
+
+# Explicitly allow README and LICENSE
+README.md text
+LICENSE text
