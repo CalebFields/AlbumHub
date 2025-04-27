@@ -32,6 +32,16 @@ class MainGUI:
         self.style = ttk.Style()
         self.style.theme_use('clam')
 
+        # reinforce global palette for any ttk widgets
+        self.root.tk_setPalette(
+            background=self.dark_bg,
+            foreground=self.light_fg,
+            activeBackground=self.dark_bg,
+            activeForeground=self.light_fg
+        )
+        self.style.configure('.', background=self.dark_bg, foreground=self.light_fg)
+
+
         self.style.configure("Treeview", background=self.treeview_bg, foreground=self.light_fg, fieldbackground=self.treeview_bg)
         self.style.configure("Treeview.Heading", background=self.header_bg, foreground=self.light_fg)
         self.style.map('Treeview', background=[('selected', self.select_bg)], foreground=[('selected', self.select_fg)])

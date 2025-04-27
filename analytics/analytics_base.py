@@ -1,9 +1,3 @@
-# analytics/analytics_base.py
-"""
-Base Analytics class to handle data fetching, plotting, and embedding in a Tkinter frame.
-Subclasses should implement fetch_data() and create_figure().
-All plots are styled for dark/night mode.
-"""
 import sqlite3
 import pandas as pd
 from abc import ABC, abstractmethod
@@ -15,58 +9,66 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 class AnalyticsBase(ABC):
     """
     Abstract base class for analytics visualizations.
-    Applies a dark theme to all Matplotlib figures.
+    Applies the application's dynamically-configured dark theme to Matplotlib figures.
     """
-    DARK_BG = '#2e3440'      # Figure background
-    AXIS_BG = '#3b4252'      # Axes background
-    FG_COLOR = '#eceff4'     # Text and tick color
-
     def __init__(self, db_path: str, title: str = None):
         self.db_path = db_path
         self.title = title or self.__class__.__name__
 
     @abstractmethod
     def fetch_data(self, **kwargs) -> pd.DataFrame:
-        """
-        Query the database and return a pandas DataFrame.
-        """
+        """Query the database and return a pandas DataFrame."""
         pass
 
     @abstractmethod
     def create_figure(self, df: pd.DataFrame, **kwargs) -> Figure:
-        """
-        Given a DataFrame, return a Matplotlib Figure object.
-        """
+        """Given a DataFrame, return a Matplotlib Figure object."""
         pass
-
+    
     def render(self, parent: ttk.Frame, **kwargs):
-        """
-        Fetches data, creates the figure, applies dark theme, and embeds it in the Tkinter frame.
-        """
-        # clear existing widgets
+        if parent is None:
+            return  # Nothing to render into, so just safely exit
+    
+        # Clear parent without deleting the parent itself
         for w in parent.winfo_children():
             w.destroy()
-
-        try:
-            df = self.fetch_data(**kwargs)
-            if df.empty:
-                messagebox.showinfo(self.title, "No data available for the selected criteria.")
-                return
-            fig = self.create_figure(df, **kwargs)
-        except Exception as e:
-            messagebox.showerror(self.title, str(e))
+    
+        # fetch data
+        df = self.fetch_data(**kwargs)
+        if df.empty:
+            messagebox.showinfo(self.title, "No data available.")
             return
 
-        # apply dark/night mode styling
-        fig.patch.set_facecolor(self.DARK_BG)
-        for ax in fig.axes:
-            ax.set_facecolor(self.AXIS_BG)
-            ax.tick_params(colors=self.FG_COLOR, labelcolor=self.FG_COLOR)
-            ax.xaxis.label.set_color(self.FG_COLOR)
-            ax.yaxis.label.set_color(self.FG_COLOR)
-            ax.title.set_color(self.FG_COLOR)
+        fig = self.create_figure(df)
 
-        # embed the Matplotlib figure into Tkinter
+        # apply dark theme
+        style = ttk.Style()
+        fig.patch.set_facecolor(style.lookup('TFrame','background') or '#2E2E2E')
+        for ax in fig.axes:
+            ax.set_facecolor(style.lookup('Treeview','fieldbackground') or '#333333')
+            ax.tick_params(colors=style.lookup('TLabel','foreground') or '#FFFFFF',
+                           labelcolor=style.lookup('TLabel','foreground') or '#FFFFFF')
+            ax.xaxis.label.set_color(style.lookup('TLabel','foreground') or '#FFFFFF')
+            ax.yaxis.label.set_color(style.lookup('TLabel','foreground') or '#FFFFFF')
+            ax.title.set_color(style.lookup('TLabel','foreground') or '#FFFFFF')
+
+        # embed Matplotlib figure
         canvas = FigureCanvasTkAgg(fig, master=parent)
+        widget = canvas.get_tk_widget()
+        widget.pack(fill=tk.BOTH, expand=True)
+
+        # layout adjustment
+        widget.update_idletasks()
+        w, h = widget.winfo_width(), widget.winfo_height()
+        dpi = fig.get_dpi()
+        fig.set_size_inches(w/dpi, h/dpi, forward=True)
+        fig.tight_layout()
+
         canvas.draw()
-        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+        # additional analysis
+        stats_box = ttk.LabelFrame(parent, text="Additional Analysis")
+        stats_box.pack(fill=tk.X, pady=(10, 0), padx=5)
+        # placeholder
+
+    

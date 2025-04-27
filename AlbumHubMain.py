@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import messagebox
+from tkinter import ttk, messagebox
 import sqlite3
 
 from gui import MainGUI
@@ -79,6 +80,21 @@ class AlbumHub:
 
 if __name__ == '__main__':
     root = tk.Tk()
+    # ——— Prime dark palette before any widgets ———
+    style = ttk.Style(root)
+    style.theme_use('clam')
+    dark_bg  = "#2E2EE2"
+    light_fg = "#FFFFFF"
+    root.configure(bg=dark_bg)
+    # globally apply to all widgets
+    root.tk_setPalette(
+        background=dark_bg,
+        foreground=light_fg,
+        activeBackground=dark_bg,
+        activeForeground=light_fg
+    )
+    style.configure('.', background=dark_bg, foreground=light_fg)
+    # ————————————————————————————————
     app = AlbumHub(root)
     root.protocol("WM_DELETE_WINDOW", app.shutdown)
     root.mainloop()
