@@ -1,6 +1,6 @@
 # AlbumHub
 
-AlbumHub is a desktop application for managing and ranking your music album collection. It imports your RateYourMusic exports, enriches them with metadata from the Discogs API, stores them in a local SQLite database, and provides an intuitive GUI for browsing and ranking your albums.
+AlbumHub is a desktop application for managing and ranking your music album collection. It imports your RateYourMusic exports (or any CSV file with artist, album, and rating), enriches them with metadata from the Discogs API, stores them in a local SQLite database, and provides an intuitive GUI for browsing, analyzing, and ranking your albums.
 
 ## Table of Contents
 
@@ -16,9 +16,10 @@ AlbumHub is a desktop application for managing and ranking your music album coll
 
 ## Features
 
-- **Import & Enrich**: Load CSV exports from RateYourMusic and enrich each album with metadata (genres, styles, cover art, etc.) from Discogs.
+- **Import & Enrich**: Load CSV exports from RateYourMusic or compatible files and enrich each album with metadata (genres, styles, cover art, etc.) from Discogs.
 - **Browse Collection**: View your album collection with cover art thumbnails, filter by artist or genre, and sort by any field.
 - **Ranking Game**: Play a tournament-style ranking game to sort albums by preference using a merge-sort–inspired interface.
+- **Analytics Tab**: Visualize genre trends, artist ratings, rating distributions, and more with interactive charts.
 - **Persistence**: Store all data in a local SQLite database; export and import your enriched collection to/from CSV.
 
 ## Prerequisites
@@ -41,7 +42,7 @@ AlbumHub is a desktop application for managing and ranking your music album coll
    pip install -r requirements.txt
    ```
 
-   Or, if you don’t have a `requirements.txt`:
+   Or, manually:
 
    ```bash
    pip install pandas requests python-dotenv Pillow
@@ -66,9 +67,10 @@ Run the application:
 python AlbumHubMain.py
 ```
 
-- **Import Tab**: Select your RateYourMusic CSV and click **Process File** to load and enrich albums.
+- **Import Tab**: Select your RateYourMusic CSV (or a compatible file with artist/album/rating columns) and click **Process File** to load and enrich albums.
 - **Browse Collection Tab**: Browse, filter, and sort your collection.
 - **Album Ranker Tab**: Play the ranking game and save or export your results.
+- **Analytics Tab**: Explore graphical analysis of your collection.
 
 ## Project Structure
 
@@ -76,45 +78,58 @@ python AlbumHubMain.py
 AlbumHub/
 ├── AlbumHubMain.py         # Entry point and app orchestration
 ├── .env                    # Discogs API credentials
-├── enriched_albums.csv     # Default CSV export/import
 ├── api/
-│   └── discogs_client.py   # Discogs API integration and enrichment logic
+│   └── discogs_client.py   # Discogs API integration
+├── analytics/
+│   ├── analytics_base.py   # Base class for visualizations
+│   ├── album_count.py      # Albums per artist chart
+│   ├── artist_ratings.py   # Average artist ratings
+│   ├── genre_ratings.py    # Ratings by genre
+│   ├── rating_distro.py    # Distribution of ratings
+│   ├── decade_trends.py    # Trends by decade
+│   └── __init__.py
 ├── database/
-│   └── db_manager.py       # SQLite DB management, import/export utilities
+│   └── db_manager.py       # SQLite database management
 ├── gui/
-│   ├── __init__.py         # MainGUI orchestration
-│   ├── import_tab.py       # UI & logic for importing/enriching albums
-│   ├── browser_tab.py      # UI & logic for browsing collection
-│   └── ranker_tab.py       # UI & logic for ranking albums
+│   ├── __init__.py         # Main GUI initialization
+│   ├── import_tab.py       # Import/enrichment tab
+│   ├── browser_tab.py      # Collection browser tab
+│   ├── ranker_tab.py       # Album ranking game tab
+│   └── analytics_tab.py    # Analytics/visualization tab
 ├── processing/
-│   └── data_cleaner.py     # CSV loading and data cleaning utilities
+│   └── data_cleaner.py     # Data loading and cleaning utilities
 ├── ranking/
-│   └── ranking_system.py   # Merge-sort–style ranking engine
+│   └── ranking_system.py   # Merge sort–style ranking engine
 ├── utilities/
-│   └── helpers.py          # Shared helper functions (logging, formatting)
-└── requirements.txt        # Python dependencies
+│   └── helpers.py          # Shared utilities
+├── build/                  # Build artifacts (if compiled)
+├── dist/                   # Distribution folder (if compiled)
+├── .gitignore              # Git ignored files
+├── LICENSE                 # GPLv3 License
+├── requirements.txt        # Python dependencies
+└── README.md               # Project documentation
 ```
 
 ## Dependencies
 
 - **tkinter** (built-in) for GUI
-- **pandas** for CSV/Excel loading and data manipulation
-- **requests** for HTTP calls to Discogs
-- **python-dotenv** for configuration
-- **Pillow** for image handling
+- **pandas** for data manipulation
+- **requests** for Discogs API calls
+- **python-dotenv** for loading environment variables
+- **Pillow** for image processing
+- **matplotlib** for analytics visualizations
 
 ## Module Overview
 
-- **AlbumHubMain.py**: Initializes core services (DB, GUI, Discogs client, processor, ranking), and wires events.
-- **discogs_client.py**: Handles rate-limited Discogs API requests; enriches album records with metadata.
-- **data_cleaner.py**: Cleans raw CSV/Excel data, decodes HTML entities, and splits multi-artist fields.
-- **db_manager.py**: Creates the `albums` table, saves enriched records, and supports CSV import/export.
-- **import_tab.py**: GUI for selecting and processing CSV files in a background thread with progress logging.
-- **browser_tab.py**: GUI for browsing and filtering your album collection with cover art thumbnails.
-- **ranker_tab.py**: GUI for playing a pairwise ranking game to order albums by preference.
-- **helpers.py**: Utility functions for formatting durations, logging messages, and resource paths.
+- **AlbumHubMain.py**: Initializes database, Discogs client, data processor, GUI, analytics, and ranking systems.
+- **discogs_client.py**: Discogs API client with rate limiting.
+- **analytics/**: Folder of modular analytics graphs (each extend `AnalyticsBase`).
+- **data_cleaner.py**: CSV/Excel loading, data normalization.
+- **db_manager.py**: Manages schema, inserts, queries, CSV import/export.
+- **gui/**: GUI tabs (Import, Browse, Rank, Analytics).
+- **ranking_system.py**: Tournament-style ranking algorithm.
+- **helpers.py**: Utility functions (e.g., logging, string formatting).
 
 ## License
 
-This project is licensed under the GNU General Public License v3.0 (GPLv3). You may redistribute and/or modify it under the terms of the GPLv3 as published by the Free Software Foundation. A copy of the license is included in the repository at [LICENSE](LICENSE), or you can view it online at https://www.gnu.org/licenses/gpl-3.0.en.html.
-
+This project is licensed under the GNU General Public License v3.0 (GPLv3). See [LICENSE](LICENSE) for details.
