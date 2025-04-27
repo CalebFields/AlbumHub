@@ -8,6 +8,7 @@ from api.discogs_client import DiscogsClient
 from processing.data_cleaner import DataProcessor
 from ranking.ranking_system import RankingSystem
 
+
 class AlbumHub:
     def __init__(self, root):
         self.root = root
@@ -22,16 +23,25 @@ class AlbumHub:
         self.database.cursor = self.database.conn.cursor()
 
         # Then setup the GUI (tabs will reference self.database)
-        self.gui      = MainGUI(self, root)
+        self.gui = MainGUI(self, root)
 
+        # Discogs, data cleaning, and ranking systems
         self.discogs   = DiscogsClient()
         self.processor = DataProcessor()
         self.ranker    = RankingSystem()
 
-        # Wire import tab's Process button to its own logic
+        # Wire import-tab logic
         self.gui.import_tab.process_button.configure(
             command=self.gui.import_tab.process_file_wrapper
         )
+
+        # ——— Hook in AnalyticsTab ———
+        from gui.analytics_tab import AnalyticsTab
+        # give it the same app and the notebook reference from MainGUI
+        self.gui.analytics_tab = AnalyticsTab(self, self.gui.notebook)
+        self.gui.analytics_tab.setup_analytics_tab()
+        # ————————————————————————
+
         # Handle database import/export notifications
         self.gui.bind('<<DatabaseUpdate>>', self.handle_database_update)
 
