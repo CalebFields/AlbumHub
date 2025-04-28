@@ -11,8 +11,7 @@ class BrowserTab:
         self.app = app
         self.root = app.root
         self.notebook = notebook
-        # Cache for PhotoImage references to avoid GC
-        self._image_cache = []
+        self._image_cache = []  # hold references to PhotoImage
 
     def setup_browser_tab(self):
         self.browser_tab = ttk.Frame(self.notebook)
@@ -21,11 +20,9 @@ class BrowserTab:
         main_frame = ttk.Frame(self.browser_tab)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # Build UI
         self.setup_search_filter_section(main_frame)
         self.setup_results_treeview(main_frame)
 
-        # Inspect table schema and load data
         self.introspect_columns()
         self.load_filters()
         self.update_results()
@@ -61,24 +58,33 @@ class BrowserTab:
         tree_frame = ttk.Frame(parent)
         tree_frame.pack(fill=tk.BOTH, expand=True)
 
-        # Set row height to accommodate cover art thumbnails
         style = ttk.Style(self.root)
-        style.configure("Treeview", rowheight=70)
-
-        # allow images in the first column (#0)
-        self.tree = ttk.Treeview(
-            tree_frame,
-            show='tree headings'
+        style.configure("Treeview",
+                        font=('Helvetica', 10),
+                        rowheight=70,  # match or slightly exceed thumbnail height
+                        background="#333333",
+                        foreground="#FFFFFF",
+                        fieldbackground="#333333"
+        )
+        style.configure("Treeview.Heading",
+                        font=('Helvetica', 11, 'bold'),
+                        background="#3C3F41",
+                        foreground="#FFFFFF",
+                        padding=(5, 2)
         )
 
+        style.map("Treeview", background=[('selected', '#4A6984')], foreground=[('selected', '#FFFFFF')])
+
+        self.tree = ttk.Treeview(tree_frame, show='tree headings')
         scrollbar = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.tree.yview)
-        self.tree.configure(yscroll=scrollbar.set)
+        self.tree.configure(yscrollcommand=scrollbar.set)
 
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
+        self.tree.bind('<ButtonRelease-1>', self.on_tree_click)
+
     def introspect_columns(self):
-        # Dynamically detect all album columns
         cur = self.app.database.conn.cursor()
         try:
             cur.execute("PRAGMA table_info(albums)")
@@ -88,60 +94,51 @@ class BrowserTab:
 
         self.all_cols = cols
         self.image_col = 'CoverArt' if 'CoverArt' in cols else None
+        self.id_col = 'id' if 'id' in cols else None
 
-        # Configure tree columns and headings
-        if self.image_col:
-            display_cols = [c for c in cols if c != self.image_col]
-            self.tree.config(columns=display_cols)
-            self.tree.heading('#0', text=self.image_col)
-            self.tree.column('#0', width=120, anchor='center')
-        else:
-            self.tree.config(columns=cols)
+        display_cols = [c for c in cols if c not in (self.image_col, self.id_col)]
+        display_cols.append('Tracks')
+        self.display_cols = display_cols
 
-        for col in cols:
-            if col == self.image_col:
-                continue
-            # set up sortable heading
-            self.tree.heading(col, text=col,
-                              command=lambda c=col: self.sort_column(c, False))
-            width = 200 if col.lower() in ('artist', 'title') else 100
-            self.tree.column(col, width=width)
+        self.tree.config(columns=display_cols)
+        self.tree.heading('#0', text=self.image_col or '')
+        self.tree.column('#0', width=120, anchor='center')
+
+        for col in display_cols:
+            self.tree.heading(col, text=col, command=lambda c=col: self.sort_column(c, False))
+            if col == 'Tracks':
+                self.tree.column(col, width=80, anchor='center')
+            else:
+                width = 200 if col.lower() in ('artist', 'title') else 100
+                self.tree.column(col, width=width)
 
     def load_filters(self):
         cur = self.app.database.conn.cursor()
         artists = set()
-        try:
-            cur.execute('SELECT "Artist" FROM albums')
-            for (a,) in cur.fetchall():
-                if a:
-                    for p in re.split(r'\s*(?:,|&|and)\s*', a):
-                        if p.strip(): artists.add(p.strip())
-        except sqlite3.OperationalError:
-            pass
+        for (a,) in cur.execute('SELECT Artist FROM albums'):
+            if a:
+                for p in re.split(r'\s*(?:,|&|and)\s*', a):
+                    if p.strip():
+                        artists.add(p.strip())
+        artist_opts = ["All"] + sorted(artists)
+        menu = self.artist_menu['menu']
+        menu.delete(0, 'end')
+        for art in artist_opts:
+            menu.add_command(label=art, command=lambda v=art: (self.artist_var.set(v), self.on_filter()))
+        self.artist_var.set("All")
 
         genres = set()
         if 'Genres' in self.all_cols:
-            try:
-                cur.execute('SELECT "Genres" FROM albums')
-                for (g,) in cur.fetchall():
-                    if g:
-                        for part in str(g).split(','):
+            for (g,) in cur.execute('SELECT Genres FROM albums'):
+                if g:
+                    for part in re.split(r'\s*(?:,|&|and)\s*', g):
+                        if part.strip():
                             genres.add(part.strip())
-            except sqlite3.OperationalError:
-                pass
-
-        artist_opts = ["All"] + sorted(artists)
-        m = self.artist_menu['menu']
-        m.delete(0, 'end')
-        for art in artist_opts:
-            m.add_command(label=art, command=lambda v=art: (self.artist_var.set(v), self.on_filter()))
-        self.artist_var.set("All")
-
         genre_opts = ["All"] + sorted(genres)
-        gm = self.genre_menu['menu']
-        gm.delete(0, 'end')
+        gmenu = self.genre_menu['menu']
+        gmenu.delete(0, 'end')
         for gen in genre_opts:
-            gm.add_command(label=gen, command=lambda v=gen: (self.genre_var.set(v), self.on_filter()))
+            gmenu.add_command(label=gen, command=lambda v=gen: (self.genre_var.set(v), self.on_filter()))
         self.genre_var.set("All")
 
     def update_results(self):
@@ -150,8 +147,8 @@ class BrowserTab:
         self._image_cache.clear()
 
         cols = self.all_cols.copy()
-        sql_cols = [f'"{c}"' for c in cols]
-        sql = f"SELECT {', '.join(sql_cols)} FROM albums"
+        cols_sql = [f'"{c}"' for c in cols]
+        sql = f"SELECT {', '.join(cols_sql)} FROM albums"
         clauses, params = [], []
         if self.artist_var.get() != "All":
             clauses.append('"Artist" = ?')
@@ -165,8 +162,7 @@ class BrowserTab:
 
         cur = self.app.database.conn.cursor()
         try:
-            cur.execute(sql, params)
-            rows = cur.fetchall()
+            rows = cur.execute(sql, params).fetchall()
         except sqlite3.OperationalError:
             rows = []
 
@@ -174,7 +170,7 @@ class BrowserTab:
             data = dict(zip(self.all_cols, row))
             img = None
             if self.image_col:
-                b64 = data.pop(self.image_col)
+                b64 = data.get(self.image_col)
                 if b64:
                     try:
                         raw = base64.b64decode(b64)
@@ -186,27 +182,58 @@ class BrowserTab:
                         img = tk_img
                     except:
                         img = None
-            values = [data[c] for c in self.all_cols if c != self.image_col]
+            album_id = data.get(self.id_col)
+            values = [data.get(c, '') for c in self.display_cols[:-1]] + ['View']
             if img:
-                self.tree.insert("", "end", text="", image=img, values=values)
+                self.tree.insert('', 'end', text='', image=img, values=values, tags=(str(album_id),))
             else:
-                self.tree.insert("", "end", text="", values=values)
+                self.tree.insert('', 'end', text='', values=values, tags=(str(album_id),))
+
+    def on_tree_click(self, event):
+        region = self.tree.identify_region(event.x, event.y)
+        if region != 'cell':
+            return
+        col = self.tree.identify_column(event.x)
+        col_idx = int(col.replace('#','')) - 1
+        col_name = self.tree['columns'][col_idx]
+        if col_name != 'Tracks':
+            return
+        item = self.tree.identify_row(event.y)
+        if not item:
+            return
+        tags = self.tree.item(item, 'tags')
+        if not tags:
+            return
+        album_id = tags[0]
+        self.open_tracklist_window(album_id)
+
+    def open_tracklist_window(self, album_id):
+        win = tk.Toplevel(self.root)
+        win.title("Tracklist")
+        tree = ttk.Treeview(win, columns=('#', 'Title', 'Duration'), show='headings')
+        tree.heading('#', text='No.')
+        tree.heading('Title', text='Track Title')
+        tree.heading('Duration', text='Duration (s)')
+        sb = ttk.Scrollbar(win, orient=tk.VERTICAL, command=tree.yview)
+        tree.configure(yscrollcommand=sb.set)
+        sb.pack(side=tk.RIGHT, fill=tk.Y)
+        tree.pack(fill=tk.BOTH, expand=True)
+        cur = self.app.database.conn.cursor()
+        cur.execute("SELECT track_number, title, duration_sec FROM tracklist WHERE album_id=? ORDER BY track_number", (album_id,))
+        for num, title, dur in cur.fetchall():
+            minutes = dur // 60
+            seconds = dur % 60
+            tree.insert('', 'end', values=(num, title, f"{minutes}:{seconds:02d}"))
 
     def on_filter(self, _=None):
         self.update_results()
 
     def sort_column(self, col, reverse):
-        # grab all values and sort
         l = [(self.tree.set(k, col), k) for k in self.tree.get_children('')]
         try:
             l.sort(key=lambda t: float(t[0]), reverse=reverse)
         except ValueError:
             l.sort(key=lambda t: t[0].lower(), reverse=reverse)
-        # rearrange
         for index, (_, k) in enumerate(l):
             self.tree.move(k, '', index)
-        # reverse sort next time
         self.tree.heading(col, command=lambda: self.sort_column(col, not reverse))
-
-    def log_message(self, message):
-        print(f"[BrowserTab] {message}")

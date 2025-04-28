@@ -1,84 +1,132 @@
 import sqlite3
 import pandas as pd
-import numpy as np
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk
 from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from .analytics_base import AnalyticsBase
-import re
 
-class GenreAverageRatings(AnalyticsBase):
+class GenreRatings(AnalyticsBase):
     """
-    Compute average album ratings grouped by genre, with proper Release_Date handling.
+    Computes and visualizes average album ratings by genre with detailed insights.
     """
-    def fetch_data(self, artist=None, genre=None, decade=None) -> pd.DataFrame:
+    def fetch_data(self, **kwargs) -> pd.DataFrame:
+        """Fetch ratings grouped by genre, optionally filtered by artist or decade."""
+        artist = kwargs.get('artist')
+        decade = kwargs.get('decade')
+        self.last_filters = {'artist': artist, 'decade': decade}
+
         conn = sqlite3.connect(self.db_path)
         df = pd.read_sql_query(
-            "SELECT Genres, Rating, Release_Date FROM albums", conn
+            "SELECT Artist, Genres, Release_Date, Rating FROM albums", conn
         )
         conn.close()
-        df = df.dropna(subset=['Genres', 'Rating', 'Release_Date'])
-        df = df.assign(genre=df['Genres'].str.split(',')).explode('genre')
-        df['genre'] = df['genre'].str.strip()
+
+        # Clean and explode genres
+        df = df.dropna(subset=['Genres', 'Rating'])
+        df['Rating'] = pd.to_numeric(df['Rating'], errors='coerce')
+        df = df.dropna(subset=['Rating'])
+        df['GenreList'] = df['Genres'].astype(str).str.split(r',\s*|\s*&\s*', expand=False)
+        df = df.explode('GenreList')
+        df['Genre'] = df['GenreList'].str.strip()
+        df = df[df['Genre'] != '']
+
+        # Extract decade
+        df['year'] = df['Release_Date'].astype(str).str.extract(r"(\d{4})")[0].astype(float, errors='ignore')
+        df['decade'] = (df['year']//10*10).astype(int).astype(str) + 's'
+
+        # Apply filters
+        if artist and artist != 'All':
+            df = df[df['Artist'].str.contains(artist, na=False, regex=False)]
         if decade and decade != 'All':
-            years = pd.to_numeric(
-                df['Release_Date'].astype(str).str.extract(r"(\d{4})")[0],
-                errors='coerce'
-            )
-            df = df[years.between(int(decade[:-1]), int(decade[:-1]) + 9)]
-        if genre and genre != 'All':
-            df = df[df['genre'] == genre]
+            df = df[df['decade'] == decade]
+
         if df.empty:
-            raise ValueError("No data for selected genre filter.")
+            return pd.DataFrame(columns=['Genre', 'avg_rating', 'count'])
+
+        # Aggregate by genre
         result = (
-            df.groupby('genre')['Rating']
-              .mean()
-              .reset_index(name='avg_rating')
+            df.groupby('Genre', observed=True)
+              .agg(avg_rating=('Rating', 'mean'), count=('Rating', 'size'))
+              .reset_index()
               .sort_values('avg_rating', ascending=False)
         )
         return result
 
     def create_figure(self, df: pd.DataFrame, **kwargs) -> Figure:
-        fig = Figure(figsize=(10, 5))
+        """Vertical bar chart of average ratings per genre with improved styling."""
+        fig = Figure(figsize=(max(6, len(df)*0.4), 6), constrained_layout=True)
         ax = fig.add_subplot(111)
-        ax.bar(df['genre'], df['avg_rating'])
-        ax.set_ylim(bottom=df['avg_rating'].min() - .5)
-        ax.set_xlabel('Genre')
-        ax.set_ylabel('Average Rating')
-        ax.set_title(self.title)
-        ax.set_xticklabels(df['genre'], rotation=45, ha='right')
-        fig.tight_layout()
+        bars = ax.bar(df['Genre'], df['avg_rating'], edgecolor='#444444')
+        # Grid lines
+        ax.yaxis.grid(True, color='#555555', linestyle='--', linewidth=0.5)
+        # Remove top/right spines
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_color('white')
+        ax.spines['bottom'].set_color('white')
+        # Labels and title
+        ax.set_ylabel('Average Rating', color='white', fontsize=12)
+        ax.set_xlabel('Genre', color='white', fontsize=12)
+        ax.set_title(self.title, color='white', pad=15, fontsize=14)
+        ax.tick_params(colors='white', rotation=45, labelsize=10)
+        # Bar labels
+        for bar in bars:
+            h = bar.get_height()
+            ax.text(
+                bar.get_x() + bar.get_width()/2,
+                h + 0.02,
+                f"{h:.2f}",
+                ha='center', va='bottom', color='white', fontsize=9
+            )
+        fig.patch.set_facecolor('#2E2E2E')
+        ax.set_facecolor('#333333')
         return fig
 
-    def render(self, parent: ttk.Frame, **kwargs):
-        super().render(parent, **kwargs)
-        stats_box = next(
-            (c for c in parent.winfo_children()
-             if isinstance(c, ttk.LabelFrame) and c.cget('text') == 'Additional Analysis'),
-            None
-        )
-        if not stats_box:
-            return
+    def _calculate_insights(self, df: pd.DataFrame) -> dict:
+        """Generate insights for genre ratings distribution, including top and bottom counts and ratings."""
+        if df.empty:
+            return {'Status': 'No data'}
+        insights = {}
+        insights['Genres Analyzed'] = len(df)
+        insights['Overall Avg Rating'] = f"{df['avg_rating'].mean():.2f}"
+        insights['Highest Rated Genre'] = f"{df.iloc[0]['Genre']} ({df.iloc[0]['avg_rating']:.2f})"
+        insights['Lowest Rated Genre'] = f"{df.iloc[-1]['Genre']} ({df.iloc[-1]['avg_rating']:.2f})"
+        counts = df['count']
+        insights['Total Albums'] = int(counts.sum())
+        insights['Genre Count Std Dev'] = f"{counts.std():.1f}"
+        # Additional in-depth metrics
+        insights['Average Albums per Genre'] = f"{counts.mean():.1f}"
+        insights['Rating Range'] = f"{df['avg_rating'].max() - df['avg_rating'].min():.2f}"
+        # Top and bottom 5 by count
+        top5 = df.nlargest(5, 'count')
+        insights['Top 5 Genres by Count'] = "; ".join(f"{row.Genre} ({row.count})" for row in top5.itertuples())
+        bottom5 = df.nsmallest(5, 'count')
+        insights['Bottom 5 Genres by Count'] = "; ".join(f"{row.Genre} ({row.count})" for row in bottom5.itertuples())
+        # Top and bottom 5 by average rating
+        top5_rating = df.nlargest(5, 'avg_rating')
+        insights['Top 5 Genres by Avg Rating'] = "; ".join(f"{row.Genre} ({row.avg_rating:.2f})" for row in top5_rating.itertuples())
+        bottom5_rating = df.nsmallest(5, 'avg_rating')
+        insights['Bottom 5 Genres by Avg Rating'] = "; ".join(f"{row.Genre} ({row.avg_rating:.2f})" for row in bottom5_rating.itertuples())
+        return insights
+
+    def render(self, parent: ttk.Frame, **kwargs) -> Figure:
+        """Render Visualization and parallel Insights for genres."""
+        for w in parent.winfo_children(): w.destroy()
         df = self.fetch_data(**kwargs)
-        total_genres = df.shape[0]
-        overall_avg = df['avg_rating'].mean() if total_genres > 0 else 0
-        top = df.iloc[0]
-        bottom = df.iloc[-1]
-        for w in stats_box.winfo_children():
-            w.destroy()
-        ttk.Label(
-            stats_box,
-            text=f"You have data for {total_genres} genres."
-        ).pack(anchor='w', padx=5, pady=2)
-        ttk.Label(
-            stats_box,
-            text=f"Overall average rating: {overall_avg:.2f}."
-        ).pack(anchor='w', padx=5, pady=2)
-        ttk.Label(
-            stats_box,
-            text=f"Highest-rated genre: {top['genre']} ({top['avg_rating']:.2f})."
-        ).pack(anchor='w', padx=5, pady=2)
-        ttk.Label(
-            stats_box,
-            text=f"Lowest-rated genre: {bottom['genre']} ({bottom['avg_rating']:.2f})."
-        ).pack(anchor='w', padx=5, pady=2)
+        # Visualization
+        vis = ttk.Labelframe(parent, text='Visualization')
+        vis.pack(fill=tk.BOTH, expand=False, pady=(0,5))
+        fig = self.create_figure(df, **kwargs)
+        FigureCanvasTkAgg(fig, master=vis).get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        # Insights
+        info = ttk.Labelframe(parent, text='Insights')
+        info.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        stats = self._calculate_insights(df)
+        cols = 4
+        for i, (k, v) in enumerate(stats.items()):
+            r, c = divmod(i, cols)
+            lbl = ttk.Label(info, text=f"{k}: {v}", anchor='center', relief='solid', borderwidth=1, padding=5)
+            lbl.grid(row=r, column=c, sticky='nsew', padx=2, pady=2)
+            info.grid_columnconfigure(c, weight=1)
+        return fig

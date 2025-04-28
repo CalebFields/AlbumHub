@@ -1,7 +1,7 @@
-# By default, prevent files from being counted by Linguist
+# Ignore by default
 * linguist-detectable=false
 
-# Allow these specific file types to be detected normally
+# Allow only the files we want counted
 *.py linguist-detectable=true
 *.html linguist-detectable=true
 *.htm linguist-detectable=true
@@ -9,3 +9,4 @@
 *.txt linguist-detectable=true
 README.md linguist-detectable=true
 LICENSE linguist-detectable=true
+.todo linguist-detectable=true
