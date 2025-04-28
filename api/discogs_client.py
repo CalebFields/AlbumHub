@@ -16,7 +16,7 @@ class DiscogsClient:
         if not self.key or not self.secret:
             raise RuntimeError("Missing Discogs credentials in .env")
         # Logger for GUI or other output
-        self.logger = logger or (lambda msg: print(msg))  # default to printing to console if no GUI logger provided
+        self.logger = logger or (lambda msg: print(msg))
 
     def _headers(self):
         return {
@@ -26,7 +26,7 @@ class DiscogsClient:
         }
 
     def fetch_discogs_release(self, artist, title, year=None):
-        """Search Discogs and fetch top release details, logging when no result or on errors."""
+        """Search Discogs and fetch top release details."""
         params = {'q': f"{title} {artist}", 'type': 'release', 'per_page': 1}
         if year:
             params['year'] = year
@@ -66,7 +66,7 @@ class DiscogsClient:
         return None
 
     def fetch_cover_art(self, url):
-        """Fetch and base64‑encode cover art, logging only on errors."""
+        """Fetch and base64‑encode cover art."""
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'MusicCollectionApp/1.0'})
             with urllib.request.urlopen(req, timeout=10) as resp:
@@ -78,13 +78,13 @@ class DiscogsClient:
         return None
 
     def extract_release_data(self, release):
+        """Extract relevant fields and parse track durations."""
         data = {
             'Genres':      ', '.join(release.get('genres', [])),
             'Styles':      ', '.join(release.get('styles', [])),
             'Label':       (release.get('labels') or [{}])[0].get('name', ''),
             'Country':     release.get('country', ''),
             'Format':      (release.get('formats') or [{}])[0].get('name', ''),
-            'Tracklist':   '; '.join([t.get('title','') for t in release.get('tracklist', [])]),
             'DiscogsYear': release.get('year', ''),
             'DiscogsID':   release.get('id', ''),
             'CoverArt':    None
@@ -92,27 +92,43 @@ class DiscogsClient:
         img_url = self.get_best_image_url(release.get('images', []))
         if img_url:
             data['CoverArt'] = self.fetch_cover_art(img_url)
+
+        durations = []
+        for idx, track in enumerate(release.get('tracklist', []), start=1):
+            title = track.get('title', '')
+            raw   = track.get('duration') or '0:00'
+            try:
+                mins, secs = raw.split(':')
+                total_sec = int(mins) * 60 + int(secs)
+            except Exception:
+                total_sec = 0
+            durations.append({
+                'track_number': idx,
+                'title':        title,
+                'duration_sec': total_sec
+            })
+        data['TracklistDurations'] = durations
+        data['TracklistSummary'] = '; '.join(t['title'] for t in durations)
+
         return data
 
     def enrich_album(self, album):
         """
-        Enriches `album` dict in place—logs when no release is found.
-        Returns the updated album.
+        Enriches `album` dict in place—adds Discogs metadata and track durations.
         """
         artist = album.get('Artist', '')
         title  = album.get('Title', '')
         year   = album.get('Release_Date', '')
 
-        try:
-            release = self.fetch_discogs_release(artist, title, year)
-            if not release:
-                self.logger(f"Could not find '{artist} - {title}' on Discogs.")
-                return album
+        release = self.fetch_discogs_release(artist, title, year)
+        if not release:
+            self.logger(f"Could not find '{artist} - {title}' on Discogs.")
+            return album
 
+        try:
             details = self.extract_release_data(release)
             album.update(details)
-            return album
-
         except Exception as e:
-            self.logger(f"Unexpected error enriching '{artist} - {title}': {e}")
-            return album
+            self.logger(f"Error extracting data for '{artist} - {title}': {e}")
+
+        return album

@@ -2,6 +2,9 @@ import tkinter as tk
 from tkinter import messagebox
 from tkinter import ttk, messagebox
 import sqlite3
+import matplotlib
+matplotlib.use('TkAgg')  # Must be before other matplotlib imports
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 from gui import MainGUI
 from database.db_manager import DatabaseManager
@@ -48,7 +51,7 @@ class AlbumHub:
 
     def load_configuration(self):
         return {
-            'api_delay':    1.5,
+            'api_delay':    1,
             'default_csv': 'enriched_albums.csv'
         }
 

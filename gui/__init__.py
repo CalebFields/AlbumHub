@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 
+
 from gui.import_tab import ImportTab
 from gui.browser_tab import BrowserTab
 from gui.ranker_tab import RankerTab
@@ -46,7 +47,7 @@ class MainGUI:
         self.style.configure("Treeview.Heading", background=self.header_bg, foreground=self.light_fg)
         self.style.map('Treeview', background=[('selected', self.select_bg)], foreground=[('selected', self.select_fg)])
         self.style.configure('TLabel', background=self.dark_bg, foreground=self.light_fg)
-        self.style.configure('TFrame', background=self.dark_bg)
+        self.style.configure('TFrame', background=self.dark_bg, bordercolor=self.dark_bg)
         self.style.configure('TButton', background=self.button_bg, foreground=self.button_fg)
         self.style.map('TButton', background=[('active', self.select_bg)], foreground=[('active', self.select_fg)])
         self.style.configure('TCombobox', fieldbackground=self.entry_bg, background=self.dark_bg, foreground=self.light_fg)
@@ -55,6 +56,7 @@ class MainGUI:
         self.style.configure('TNotebook', background=self.dark_bg)
         self.style.configure('TNotebook.Tab', background=self.button_bg, foreground=self.light_fg)
         self.style.map('TNotebook.Tab', background=[('selected', self.select_bg)], foreground=[('selected', self.select_fg)])
+        self.style.configure('TLabelframe', background=self.dark_bg)
 
     def setup_notebook(self):
         self.notebook = ttk.Notebook(self.root)
