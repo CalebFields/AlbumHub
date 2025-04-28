@@ -10,7 +10,7 @@ from export.exporters import export_chart_and_insights
 ANALYTICS_CLASSES = {}
 for finder, module_name, is_pkg in pkgutil.iter_modules(analytics.__path__, analytics.__name__ + "."):
     if module_name.endswith("analytics_base"):
-        continue
+        continue  # Skip the base class module itself
     module = importlib.import_module(module_name)
     for attr in dir(module):
         cls = getattr(module, attr)
@@ -19,18 +19,20 @@ for finder, module_name, is_pkg in pkgutil.iter_modules(analytics.__path__, anal
 
 class AnalyticsTab:
     def __init__(self, app, notebook):
+        # Initialize the Analytics Tab
         self.app = app
         self.root = app.root
         self.notebook = notebook
-        self.analysis_type = tk.StringVar()
-        self.filter_type = tk.StringVar(value='all')
-        self.filter_value = tk.StringVar()
+        self.analysis_type = tk.StringVar()  # Selected analysis type
+        self.filter_type = tk.StringVar(value='all')  # Filter category (genre, artist, decade, etc.)
+        self.filter_value = tk.StringVar()  # Selected filter value
         self.current_analysis = None
         self.chart_frame = None
         self.canvas = None
         self.canvas_window = None
 
     def setup_analytics_tab(self):
+        # Create and configure the analytics tab frame
         frame = ttk.Frame(self.notebook)
         self.notebook.add(frame, text="Analytics")
         frame.grid_rowconfigure(0, weight=1)
@@ -43,6 +45,7 @@ class AnalyticsTab:
 
         self._setup_controls(container)
 
+        # Create the chart and insights area with scrollbars
         chart_box = ttk.LabelFrame(container, text="Chart & Insights")
         chart_box.grid(row=1, column=0, sticky='nsew', pady=(10, 0))
         chart_box.grid_rowconfigure(0, weight=1)
@@ -52,20 +55,23 @@ class AnalyticsTab:
         v_scroll = ttk.Scrollbar(chart_box, orient=tk.VERTICAL, command=self.canvas.yview)
         h_scroll = ttk.Scrollbar(chart_box, orient=tk.HORIZONTAL, command=self.canvas.xview)
         self.canvas.configure(yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set)
+
         v_scroll.grid(row=0, column=1, sticky='ns')
         h_scroll.grid(row=1, column=0, sticky='ew')
         self.canvas.grid(row=0, column=0, sticky='nsew')
 
         scroll_frame = ttk.Frame(self.canvas)
-        self.canvas_window = self.canvas.create_window((0, 0), window=scroll_frame, anchor='nw')
+        self.canvas_window = self.canvas.create_window((0, 0), window=scroll_frame, anchor='nw')  # Embed frame into canvas
         self.canvas.bind('<Configure>', lambda e: self.canvas.itemconfig(self.canvas_window, width=e.width))
         scroll_frame.bind('<Configure>', lambda e: self.canvas.configure(scrollregion=self.canvas.bbox('all')))
         self.chart_frame = scroll_frame
 
+        # Export button for saving chart and insights
         export_btn = ttk.Button(chart_box, text="Export", command=self.on_export_clicked)
         export_btn.grid(row=2, column=0, padx=5, pady=5, sticky='e')
 
     def _setup_controls(self, parent):
+        # Create filtering and analysis controls
         control_frame = ttk.LabelFrame(parent, text="Analytics Options")
         control_frame.grid(row=0, column=0, sticky='ew', pady=(0, 10))
 
@@ -85,7 +91,7 @@ class AnalyticsTab:
 
         ttk.Label(control_frame, text="Analysis:").pack(side=tk.LEFT, padx=15)
         names = sorted(ANALYTICS_CLASSES.keys())
-        self.analysis_type.set(names[0] if names else '')
+        self.analysis_type.set(names[0] if names else '')  # Default to first available analysis
         self.analysis_combo = ttk.Combobox(
             control_frame, textvariable=self.analysis_type,
             values=names, state='readonly', width=20
@@ -94,9 +100,11 @@ class AnalyticsTab:
         self.analysis_combo.bind('<<ComboboxSelected>>', lambda e: self.safe_apply_filters_and_draw())
 
     def _update_filter_values(self):
+        # Populate the filter dropdown based on selected filter type
         cur = self.app.database.conn.cursor()
         f = self.filter_type.get()
         opts = []
+
         if f == 'all':
             opts = ['All']
         elif f == 'artist':
@@ -104,6 +112,7 @@ class AnalyticsTab:
             artists = set()
             for (a,) in cur.fetchall():
                 if a:
+                    # Split on commas, ampersands, or "and" to separate artists
                     for part in re.split(r"\s*(?:,|&|and)\s*", a):
                         if part.strip():
                             artists.add(part.strip())
@@ -113,6 +122,7 @@ class AnalyticsTab:
             genres = set()
             for (g,) in cur.fetchall():
                 if g:
+                    # Same splitting logic for genres
                     for part in re.split(r"\s*(?:,|&|and)\s*", g):
                         if part.strip():
                             genres.add(part.strip())
@@ -121,35 +131,39 @@ class AnalyticsTab:
             cur.execute("SELECT Release_Date FROM albums")
             decades = set()
             for (d,) in cur.fetchall():
-                m = re.search(r"(\d{4})", str(d))
+                m = re.search(r"(\d{4})", str(d))  # Extract year from release date
                 if m:
-                    decades.add(f"{int(m.group(1))//10*10}s")
+                    decades.add(f"{int(m.group(1))//10*10}s")  # Convert year to decade
             opts = ['All'] + sorted(decades)
+
         self.filter_combo['values'] = opts
         self.filter_combo.config(state='readonly' if opts else 'disabled')
         self.filter_value.set(opts[0] if opts else '')
 
     def safe_apply_filters_and_draw(self):
+        # Apply filters and redraw chart safely (fallback if errors)
         try:
             self.apply_filters_and_draw()
         except Exception:
             self._update_filter_values()
 
     def apply_filters_and_draw(self):
+        # Apply selected filters and redraw chart
         if not self.chart_frame:
             return
         analysis = self.analysis_type.get()
         if not analysis:
             return
         self.show_loading_message("Working...")
-        self.root.after(100, self._draw_chart)
+        self.root.after(100, self._draw_chart)  # Allow UI to update before heavy drawing
 
     def _draw_chart(self):
+        # Internal method to render the chart
         for w in self.chart_frame.winfo_children():
             w.destroy()
 
         v = self.filter_value.get()
-        kwargs = {} if v == 'All' else {self.filter_type.get(): v}
+        kwargs = {} if v == 'All' else {self.filter_type.get(): v}  # Build keyword arguments based on filter
 
         cls = ANALYTICS_CLASSES.get(self.analysis_type.get())
         if not cls:
@@ -162,32 +176,25 @@ class AnalyticsTab:
         self.canvas.configure(scrollregion=self.canvas.bbox('all'))
 
     def on_export_clicked(self):
+        # Export current chart and insights
         if not self.current_analysis:
             messagebox.showwarning("No Chart", "No chart available to export.")
             return
-    
+
         export_dir = filedialog.askdirectory(title="Select Export Directory")
         if not export_dir:
             return
-    
+
         try:
-            # Prepare current filters
             v = self.filter_value.get()
             kwargs = {} if v == 'All' else {self.filter_type.get(): v}
-    
-            # Use the analytics base export method
-            base_path = self.current_analysis.export(export_dir, **kwargs)
-    
-            messagebox.showinfo(
-                "Export Complete",
-                f"Exported:\n{base_path}.png\n{base_path}.txt"
-            )
-    
+            base_path = self.current_analysis.export(export_dir, **kwargs)  # Export both chart and insights
+            messagebox.showinfo("Export Complete", f"Exported:\n{base_path}.png\n{base_path}.txt")
         except Exception as e:
             messagebox.showerror("Export Failed", str(e))
 
-
     def show_loading_message(self, message="Working..."):
+        # Display a loading message while processing
         for w in self.chart_frame.winfo_children():
             w.destroy()
         ttk.Label(

@@ -8,25 +8,26 @@ from html import unescape
 class DiscogsClient:
     def __init__(self, logger=None):
         """
-        logger: function taking a single string argument for logging (e.g. GUI log_message)
+        Initialize the DiscogsClient.
+        logger: function that accepts a string for output (e.g., GUI or console logger)
         """
         load_dotenv()
-        self.key    = os.getenv('DISCOGS_KEY')
+        self.key = os.getenv('DISCOGS_KEY')
         self.secret = os.getenv('DISCOGS_SECRET')
         if not self.key or not self.secret:
             raise RuntimeError("Missing Discogs credentials in .env")
-        # Logger for GUI or other output
         self.logger = logger or (lambda msg: print(msg))
 
     def _headers(self):
+        # Construct HTTP headers for Discogs API
         return {
-            'User-Agent':   'MusicCollectionApp/1.0',
-            'Accept':       'application/json',
-            'Authorization':'Discogs key={}, secret={}'.format(self.key, self.secret)
+            'User-Agent': 'MusicCollectionApp/1.0',
+            'Accept': 'application/json',
+            'Authorization': f'Discogs key={self.key}, secret={self.secret}'
         }
 
     def fetch_discogs_release(self, artist, title, year=None):
-        """Search Discogs and fetch top release details."""
+        """Search Discogs database and fetch the first matching release."""
         params = {'q': f"{title} {artist}", 'type': 'release', 'per_page': 1}
         if year:
             params['year'] = year
@@ -43,7 +44,7 @@ class DiscogsClient:
                 return None
 
             rid = results[0]['id']
-            r2  = requests.get(
+            r2 = requests.get(
                 f'https://api.discogs.com/releases/{rid}',
                 headers=self._headers(), timeout=10
             )
@@ -57,6 +58,7 @@ class DiscogsClient:
         return None
 
     def get_best_image_url(self, images):
+        # Pick the primary image if available, otherwise the first available
         for img in images or []:
             if img.get('type') == 'primary' and img.get('uri'):
                 return img['uri']
@@ -66,29 +68,30 @@ class DiscogsClient:
         return None
 
     def fetch_cover_art(self, url):
-        """Fetch and base64‑encode cover art."""
+        """Download an image and base64 encode it."""
         try:
             req = urllib.request.Request(url, headers={'User-Agent': 'MusicCollectionApp/1.0'})
             with urllib.request.urlopen(req, timeout=10) as resp:
                 data = resp.read()
             return base64.b64encode(data).decode('utf-8')
-
         except Exception as e:
             self.logger(f"Cover art error from {url}: {e}")
         return None
 
     def extract_release_data(self, release):
-        """Extract relevant fields and parse track durations."""
+        """Extract genres, styles, label, country, format, year, and tracklist."""
         data = {
-            'Genres':      ', '.join(release.get('genres', [])),
-            'Styles':      ', '.join(release.get('styles', [])),
-            'Label':       (release.get('labels') or [{}])[0].get('name', ''),
-            'Country':     release.get('country', ''),
-            'Format':      (release.get('formats') or [{}])[0].get('name', ''),
+            'Genres': ', '.join(release.get('genres', [])),
+            'Styles': ', '.join(release.get('styles', [])),
+            'Label': (release.get('labels') or [{}])[0].get('name', ''),
+            'Country': release.get('country', ''),
+            'Format': (release.get('formats') or [{}])[0].get('name', ''),
             'DiscogsYear': release.get('year', ''),
-            'DiscogsID':   release.get('id', ''),
-            'CoverArt':    None
+            'DiscogsID': release.get('id', ''),
+            'CoverArt': None
         }
+
+        # Attempt to fetch cover art if available
         img_url = self.get_best_image_url(release.get('images', []))
         if img_url:
             data['CoverArt'] = self.fetch_cover_art(img_url)
@@ -96,7 +99,7 @@ class DiscogsClient:
         durations = []
         for idx, track in enumerate(release.get('tracklist', []), start=1):
             title = track.get('title', '')
-            raw   = track.get('duration') or '0:00'
+            raw = track.get('duration') or '0:00'
             try:
                 mins, secs = raw.split(':')
                 total_sec = int(mins) * 60 + int(secs)
@@ -104,7 +107,7 @@ class DiscogsClient:
                 total_sec = 0
             durations.append({
                 'track_number': idx,
-                'title':        title,
+                'title': title,
                 'duration_sec': total_sec
             })
         data['TracklistDurations'] = durations
@@ -114,11 +117,11 @@ class DiscogsClient:
 
     def enrich_album(self, album):
         """
-        Enriches `album` dict in place—adds Discogs metadata and track durations.
+        Enrich a given album dictionary with Discogs metadata if available.
         """
         artist = album.get('Artist', '')
-        title  = album.get('Title', '')
-        year   = album.get('Release_Date', '')
+        title = album.get('Title', '')
+        year = album.get('Release_Date', '')
 
         release = self.fetch_discogs_release(artist, title, year)
         if not release:
