@@ -11,23 +11,21 @@ from api.discogs_client import DiscogsClient
 
 class ImportTab:
     def __init__(self, app, notebook):
+        # Initialize the Import Tab
         self.app = app
         self.root = app.root
         self.notebook = notebook
-        # Rate-limit interval comes from config
-        self.delay = float(self.app.config.get('api_delay', 1.2))
-        # Processing queue for thread communication
-        self.processing_queue = queue.Queue()
+        self.delay = float(self.app.config.get('api_delay', 1.2))  # API rate-limit delay
+        self.processing_queue = queue.Queue()  # For communicating between thread and UI
         self.discogs = DiscogsClient(logger=self.log_message)
 
     def log_message(self, message: str):
-        """
-        Receives log messages from DiscogsClient and routes them to the UI.
-        """
+        # Add a timestamped message to the processing queue
         ts = datetime.now().strftime('%H:%M:%S')
         self.processing_queue.put(("message", f"[{ts}] {message}"))
 
     def setup_import_tab(self):
+        # Setup the Import tab UI
         self.import_tab = ttk.Frame(self.notebook)
         self.notebook.add(self.import_tab, text='Import Data')
 
@@ -42,7 +40,7 @@ class ImportTab:
         self._build_ui(main)
 
     def _build_ui(self, parent):
-        # Instructions
+        # Instructions panel
         instruct = ttk.LabelFrame(parent, text="Instructions")
         instruct.pack(fill=tk.X, pady=10)
         ttk.Label(instruct, text=(
@@ -52,21 +50,21 @@ class ImportTab:
             "4. View progress in the log"
         ), justify=tk.LEFT).pack(padx=10, pady=10)
 
-        # File selection
+        # File selection panel
         fs = ttk.Frame(parent)
         fs.pack(fill=tk.X, pady=10)
         ttk.Label(fs, text="Selected file:").pack(side=tk.LEFT)
         ttk.Entry(fs, textvariable=self.file_path_var, width=50).pack(side=tk.LEFT, padx=5)
         ttk.Button(fs, text="Browse...", command=self.select_input_file).pack(side=tk.LEFT)
 
-        # Status and action
+        # Status and action buttons
         ttk.Label(parent, textvariable=self.status_var).pack(fill=tk.X, pady=10)
         btn_frame = ttk.Frame(parent)
         btn_frame.pack(fill=tk.X)
         self.process_button = ttk.Button(btn_frame, text="Process File", command=self.process_file_wrapper)
         self.process_button.pack(side=tk.LEFT)
 
-        # Log output
+        # Log output section
         log_frame = ttk.LabelFrame(parent, text="Processing Log")
         log_frame.pack(fill=tk.BOTH, expand=True, pady=10)
         self.log_text = tk.Text(log_frame, bg="#333", fg="#fff", wrap=tk.WORD)
@@ -76,6 +74,7 @@ class ImportTab:
         self.log_text.pack(fill=tk.BOTH, expand=True)
 
     def select_input_file(self):
+        # Open a file dialog to select a CSV file
         path = filedialog.askopenfilename(
             title="Select CSV file",
             filetypes=[("CSV files", "*.csv"), ("All files", "*")]
@@ -85,11 +84,12 @@ class ImportTab:
             self.status_var.set(f"Selected: {path}")
 
     def process_file_wrapper(self):
+        # Validate and start file processing in a new thread
         input_file = self.file_path_var.get()
         if not input_file:
             messagebox.showwarning("No File", "Please select a CSV file.")
             return
-        # Count total records
+
         try:
             with open(input_file, encoding='utf-8') as f:
                 self.total_albums = sum(1 for _ in csv.DictReader(f))
@@ -97,14 +97,12 @@ class ImportTab:
             self.processing_queue.put(("error", f"Failed to read file: {e}"))
             return
 
-        # Prepare UI
         self.process_button.config(state=tk.DISABLED)
         self.status_var.set(f"Starting... 0/{self.total_albums}")
         self.log_text.delete('1.0', tk.END)
         self.processing_queue = queue.Queue()
         self.stop_event.clear()
 
-        # Launch processing thread
         self.processing_thread = threading.Thread(
             target=self._threaded_process, args=(input_file,), daemon=True
         )
@@ -112,6 +110,7 @@ class ImportTab:
         self.root.after(100, self.check_processing_queue)
 
     def _threaded_process(self, filepath: str):
+        # Background thread for processing CSV records
         try:
             albums = self.app.processor.load_albums(filepath)
         except Exception as e:
@@ -126,7 +125,7 @@ class ImportTab:
             artist = album.get('Artist', '').strip()
             title = album.get('Title', '').strip()
 
-            # Skip if already in DB
+            # Skip albums already in DB
             cur = self.app.database.conn.cursor()
             cur.execute(
                 "SELECT 1 FROM albums WHERE Artist = ? AND Title = ? LIMIT 1",
@@ -146,8 +145,7 @@ class ImportTab:
                 time.sleep(self.delay)
                 continue
 
-            # Throttle
-            time.sleep(self.delay)
+            time.sleep(self.delay)  # Rate-limiting
 
             elapsed = time.monotonic() - start_time
             eta_secs = (self.total_albums - idx) * elapsed
@@ -161,6 +159,7 @@ class ImportTab:
         self.processing_queue.put(("complete",))
 
     def check_processing_queue(self):
+        # Check and handle messages from the processing queue
         try:
             while True:
                 kind, *data = self.processing_queue.get_nowait()
@@ -174,7 +173,7 @@ class ImportTab:
                         self.status_var.set(msg.split('] ')[-1])
                 elif kind == "error":
                     err, = data
-                    self.log_text.insert(tk.END, "🔴 " + err + "\n")
+                    self.log_text.insert(tk.END, "\ud83d\udd34 " + err + "\n")
                     self.log_text.see(tk.END)
                     messagebox.showerror("Error", err)
                 elif kind == "complete":
@@ -188,33 +187,33 @@ class ImportTab:
             self.process_button.config(state=tk.NORMAL)
 
     def _on_processing_complete(self):
-        self.log_text.insert(tk.END, "✅ All done!\n")
+        # Actions to perform after processing finishes
+        self.log_text.insert(tk.END, "\u2705 All done!\n")
         self.log_text.see(tk.END)
         self.status_var.set("Completed successfully")
         self.process_button.config(state=tk.NORMAL)
 
-        # Auto-export enriched albums CSV
         try:
             out = 'enriched_albums.csv'
             self.app.database.export_csv(out)
-            self.log_text.insert(tk.END, f"✅ Exported enriched data to {out}\n")
+            self.log_text.insert(tk.END, f"\u2705 Exported enriched data to {out}\n")
             self.log_text.see(tk.END)
         except Exception as e:
-            self.log_text.insert(tk.END, f"🔴 Export failed: {e}\n")
+            self.log_text.insert(tk.END, f"\ud83d\udd34 Export failed: {e}\n")
             self.log_text.see(tk.END)
             messagebox.showerror("Export Error", str(e))
 
-        # Auto-load default CSV into view
         try:
             default = self.app.config.get('default_csv', 'enriched_albums.csv')
             self.app.database.import_csv_data(default)
-            self.log_text.insert(tk.END, f"✅ Loaded {default} into the collection view\n")
+            self.log_text.insert(tk.END, f"\u2705 Loaded {default} into the collection view\n")
             self.log_text.see(tk.END)
         except Exception as e:
-            self.log_text.insert(tk.END, f"🔴 Load into view failed: {e}\n")
+            self.log_text.insert(tk.END, f"\ud83d\udd34 Load into view failed: {e}\n")
             self.log_text.see(tk.END)
 
     def on_close(self):
+        # Gracefully stop any running thread on window close
         self.stop_event.set()
         if self.processing_thread and self.processing_thread.is_alive():
             self.processing_thread.join(timeout=2)

@@ -1,13 +1,13 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-
 from gui.import_tab import ImportTab
 from gui.browser_tab import BrowserTab
 from gui.ranker_tab import RankerTab
 
 class MainGUI:
     def __init__(self, app_controller, root):
+        # Initialize Main GUI controller and root window
         self.app = app_controller
         self.root = root
         self.root.title("AlbumHub")
@@ -18,6 +18,7 @@ class MainGUI:
         self.setup_tabs()
 
     def setup_theme(self):
+        # Define theme colors
         self.dark_bg = "#2E2E2E"
         self.light_fg = "#FFFFFF"
         self.button_bg = "#444444"
@@ -30,10 +31,11 @@ class MainGUI:
 
         self.root.configure(bg=self.dark_bg)
 
+        # Setup ttk styles
         self.style = ttk.Style()
         self.style.theme_use('clam')
 
-        # reinforce global palette for any ttk widgets
+        # Set palette for default widgets
         self.root.tk_setPalette(
             background=self.dark_bg,
             foreground=self.light_fg,
@@ -42,10 +44,12 @@ class MainGUI:
         )
         self.style.configure('.', background=self.dark_bg, foreground=self.light_fg)
 
-
+        # Customize Treeview appearance
         self.style.configure("Treeview", background=self.treeview_bg, foreground=self.light_fg, fieldbackground=self.treeview_bg)
         self.style.configure("Treeview.Heading", background=self.header_bg, foreground=self.light_fg)
         self.style.map('Treeview', background=[('selected', self.select_bg)], foreground=[('selected', self.select_fg)])
+
+        # Customize common ttk widget styles
         self.style.configure('TLabel', background=self.dark_bg, foreground=self.light_fg)
         self.style.configure('TFrame', background=self.dark_bg, bordercolor=self.dark_bg)
         self.style.configure('TButton', background=self.button_bg, foreground=self.button_fg)
@@ -59,21 +63,25 @@ class MainGUI:
         self.style.configure('TLabelframe', background=self.dark_bg)
 
     def setup_notebook(self):
+        # Create the main notebook for tabs
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill=tk.BOTH, expand=True)
 
     def setup_tabs(self):
+        # Initialize all tabs (Import, Browser, Ranker)
         self.import_tab = ImportTab(self.app, self.notebook)
         self.browser_tab = BrowserTab(self.app, self.notebook)
         self.ranker_tab = RankerTab(self.app, self.notebook)
+
         self.import_tab.setup_import_tab()
         self.browser_tab.setup_browser_tab()
         self.ranker_tab.setup_ranker_tab()
 
-        # Bind to Notebook tab changes to refresh browser tab
+        # Refresh browser data when tabs are changed
         self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
 
     def on_tab_changed(self, event):
+        # Refresh browser tab data when switching tabs
         selected_frame = event.widget.nametowidget(event.widget.select())
         if selected_frame is self.browser_tab.browser_tab:
             self.browser_tab.introspect_columns()
@@ -81,36 +89,44 @@ class MainGUI:
             self.browser_tab.update_results()
 
     def update_status(self, message):
+        # Update the import tab status bar
         try:
             self.import_tab.status_var.set(message)
         except Exception:
             print(f"[Status Update] {message}")
 
     def update_progress(self, current, total, message):
+        # Update the import tab progress bar
         if hasattr(self.import_tab, 'progress_bar'):
             progress_pct = int((current / total) * 100)
             self.import_tab.progress_bar['value'] = progress_pct
             self.import_tab.progress_var.set(message)
 
     def clear_progress(self):
+        # Reset the import tab progress bar
         if hasattr(self.import_tab, 'progress_bar'):
             self.import_tab.progress_bar['value'] = 0
             self.import_tab.progress_var.set("Idle")
 
     def enable_controls(self, enable):
+        # Enable or disable buttons in the import tab
         state = tk.NORMAL if enable else tk.DISABLED
         for child in self.import_tab.import_tab.winfo_children():
             if isinstance(child, ttk.Button):
                 child['state'] = state
 
     def show_warning(self, title, message):
+        # Show a warning message box
         messagebox.showwarning(title, message)
 
     def show_error(self, title, message):
+        # Show an error message box
         messagebox.showerror(title, message)
 
     def bind(self, sequence, handler):
+        # Global event binding to the root window
         self.root.bind(sequence, handler)
 
     def update_database_view(self):
+        # Manually refresh the browser tab's view
         self.browser_tab.update_results()

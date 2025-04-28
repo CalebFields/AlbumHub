@@ -1,5 +1,7 @@
 # ranking/ranking_system.py
 
+# CURRENTLY NOT IN USE, NOT SUPPORTED
+
 import random
 
 class RankingSystem:
