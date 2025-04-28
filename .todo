@@ -1,21 +1,6 @@
 TODO:
 # Bugfix/commenting pass through
 
-# More analytics
-
-	# Subgenre analytics
-
-		# Top subgenres by count and average ratings
-
-	# Label Analytics
-
-		# Top Labels by Count: Which record labels appear most often?
-
-		# Label Quality: Average ratings
-	
-	# Country of Release
-
-		# Top countries by count and average ratings
 
 POST 1.0:	
 # Integrate YouTube Music links
