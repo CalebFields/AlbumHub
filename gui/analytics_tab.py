@@ -43,7 +43,7 @@ class AnalyticsTab:
 
         self._setup_controls(container)
 
-        chart_box = ttk.LabelFrame(container, text="Chart")
+        chart_box = ttk.LabelFrame(container, text="Chart & Insights")
         chart_box.grid(row=1, column=0, sticky='nsew', pady=(10, 0))
         chart_box.grid_rowconfigure(0, weight=1)
         chart_box.grid_columnconfigure(0, weight=1)
@@ -56,11 +56,11 @@ class AnalyticsTab:
         h_scroll.grid(row=1, column=0, sticky='ew')
         self.canvas.grid(row=0, column=0, sticky='nsew')
 
-        scrollable_frame = ttk.Frame(self.canvas)
-        self.canvas_window = self.canvas.create_window((0, 0), window=scrollable_frame, anchor='nw')
+        scroll_frame = ttk.Frame(self.canvas)
+        self.canvas_window = self.canvas.create_window((0, 0), window=scroll_frame, anchor='nw')
         self.canvas.bind('<Configure>', lambda e: self.canvas.itemconfig(self.canvas_window, width=e.width))
-        scrollable_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
-        self.chart_frame = scrollable_frame
+        scroll_frame.bind('<Configure>', lambda e: self.canvas.configure(scrollregion=self.canvas.bbox('all')))
+        self.chart_frame = scroll_frame
 
         export_btn = ttk.Button(chart_box, text="Export", command=self.on_export_clicked)
         export_btn.grid(row=2, column=0, padx=5, pady=5, sticky='e')
@@ -70,23 +70,25 @@ class AnalyticsTab:
         control_frame.grid(row=0, column=0, sticky='ew', pady=(0, 10))
 
         ttk.Label(control_frame, text="Filter by:").pack(side=tk.LEFT, padx=5)
-        for txt, val in [("All Albums", "all"), ("Genre", "genre"),
-                         ("Artist", "artist"), ("Decade", "decade")]:
-            ttk.Radiobutton(control_frame, text=txt, variable=self.filter_type, value=val,
-                            command=self._update_filter_values).pack(side=tk.LEFT, padx=5)
+        for txt, val in [("All Albums", "all"), ("Genre", "genre"), ("Artist", "artist"), ("Decade", "decade")]:
+            ttk.Radiobutton(
+                control_frame, text=txt, variable=self.filter_type, value=val,
+                command=self._update_filter_values
+            ).pack(side=tk.LEFT, padx=5)
 
         self.filter_combo = ttk.Combobox(
-            control_frame, textvariable=self.filter_value, state='disabled', width=20
+            control_frame, textvariable=self.filter_value,
+            state='disabled', width=20
         )
         self.filter_combo.pack(side=tk.LEFT, padx=5)
         self.filter_combo.bind('<<ComboboxSelected>>', lambda e: self.apply_filters_and_draw())
 
         ttk.Label(control_frame, text="Analysis:").pack(side=tk.LEFT, padx=15)
-        sorted_names = sorted(ANALYTICS_CLASSES.keys())
-        self.analysis_type.set(sorted_names[0] if sorted_names else '')
+        names = sorted(ANALYTICS_CLASSES.keys())
+        self.analysis_type.set(names[0] if names else '')
         self.analysis_combo = ttk.Combobox(
             control_frame, textvariable=self.analysis_type,
-            values=sorted_names, state='readonly', width=20
+            values=names, state='readonly', width=20
         )
         self.analysis_combo.pack(side=tk.LEFT, padx=5)
         self.analysis_combo.bind('<<ComboboxSelected>>', lambda e: self.safe_apply_filters_and_draw())
@@ -127,6 +129,8 @@ class AnalyticsTab:
             self._update_filter_values()
 
     def apply_filters_and_draw(self):
+        if not self.chart_frame:
+            return
         analysis = self.analysis_type.get()
         if not analysis:
             return
@@ -134,54 +138,21 @@ class AnalyticsTab:
         self.root.after(100, self._draw_chart)
 
     def _draw_chart(self):
-        for widget in self.chart_frame.winfo_children():
-            widget.destroy()
+        for w in self.chart_frame.winfo_children():
+            w.destroy()
 
-        self.chart_frame.grid_rowconfigure(0, weight=1)
-        self.chart_frame.grid_rowconfigure(1, weight=0)
-        self.chart_frame.grid_columnconfigure(0, weight=1)
-
-        analysis = self.analysis_type.get()
-        if not analysis:
-            return
-
-        kwargs = {}
         v = self.filter_value.get()
-        if v != 'All':
-            kwargs[self.filter_type.get()] = v
+        kwargs = {} if v == 'All' else {self.filter_type.get(): v}
 
-        cls = ANALYTICS_CLASSES.get(analysis)
+        cls = ANALYTICS_CLASSES.get(self.analysis_type.get())
         if not cls:
-            ttk.Label(self.chart_frame, text=f"Analysis '{analysis}' not found.",
-                      anchor='center').grid(row=0, column=0, sticky='nsew')
+            ttk.Label(self.chart_frame, text="Analysis not found", anchor='center').pack(fill='both', expand=True)
             return
 
-        self.current_analysis = cls(self.app.database.db_name, title=analysis)
-        df = self.current_analysis.fetch_data(**kwargs)
-        fig = self.current_analysis.create_figure(df)
+        self.current_analysis = cls(self.app.database.db_name, title=self.analysis_type.get())
+        self.current_analysis.render(self.chart_frame, **kwargs)
 
-        # Visualization cell
-        chart_cell = ttk.Labelframe(self.chart_frame, text="Visualization")
-        chart_cell.grid(row=0, column=0, sticky='nsew', padx=5, pady=5)
-        chart_canvas = FigureCanvasTkAgg(fig, master=chart_cell)
-        chart_canvas.get_tk_widget().pack(fill=tk.X)
-        chart_canvas.draw()
-        self.current_analysis.fig = fig
-
-        # Insights cell
-        info_cell = ttk.Labelframe(self.chart_frame, text="Insights")
-        info_cell.grid(row=1, column=0, sticky='ew', padx=5, pady=(0,5))
-        stats = self.current_analysis._calculate_statistics(df)
-        cols = min(len(stats), 4)
-        for idx, (key, value) in enumerate(stats.items()):
-            r, c = divmod(idx, cols)
-            lbl = ttk.Label(info_cell, text=f"{key}: {value}", anchor='center',
-                            borderwidth=1, relief='solid', padding=5)
-            lbl.grid(row=r, column=c, sticky='nsew', padx=2, pady=2)
-            info_cell.grid_columnconfigure(c, weight=1)
-
-        self.chart_frame.update_idletasks()
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        self.canvas.configure(scrollregion=self.canvas.bbox('all'))
 
     def on_export_clicked(self):
         if not self.current_analysis or not hasattr(self.current_analysis, 'fig'):
@@ -196,27 +167,23 @@ class AnalyticsTab:
             return
         base_path = os.path.splitext(base_file)[0]
         try:
-            df = self.current_analysis.fetch_data()
-            stats = self.current_analysis._calculate_statistics(df)
-        except Exception as e:
-            messagebox.showerror("Error", str(e))
-            return
-        try:
-            export_chart_and_insights(self.current_analysis.fig, stats, base_path)
-            messagebox.showinfo(
-                "Export Complete",
-                f"Exported to:\n{base_path}.png\n{base_path}.txt"
-            )
+            if hasattr(self.current_analysis, 'export_visualization'):
+                self.current_analysis.export_visualization(base_path)
+            else:
+                stats = self.current_analysis._calculate_statistics(
+                    self.current_analysis.fetch_data()
+                )
+                export_chart_and_insights(self.current_analysis.fig, stats, base_path)
+            messagebox.showinfo("Export Complete", f"Exported to:\n{base_path}.png\n{base_path}.txt")
         except Exception as e:
             messagebox.showerror("Export Failed", str(e))
 
     def show_loading_message(self, message="Working..."):
-        for widget in self.chart_frame.winfo_children():
-            widget.destroy()
+        for w in self.chart_frame.winfo_children():
+            w.destroy()
         ttk.Label(
             self.chart_frame,
             text=message,
             anchor='center',
             font=("Segoe UI", 14, "bold")
-        ).pack(expand=True, fill='both')
-        self.chart_frame.update_idletasks()
+        ).pack(fill='both', expand=True)
