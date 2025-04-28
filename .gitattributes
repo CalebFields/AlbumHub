@@ -5,7 +5,7 @@
 *.py linguist-detectable=true
 *.html linguist-detectable=true
 *.htm linguist-detectable=true
-*.csv linguist-detectable=true
+*.csv linguist-detectable=false
 *.txt linguist-detectable=true
 README.md linguist-detectable=true
 LICENSE linguist-detectable=true
