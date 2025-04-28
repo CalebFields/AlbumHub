@@ -100,24 +100,31 @@ class AnalyticsTab:
         if f == 'all':
             opts = ['All']
         elif f == 'artist':
-            cur.execute("SELECT DISTINCT Artist FROM albums")
-            opts = sorted(r[0] for r in cur.fetchall() if r[0])
+            cur.execute("SELECT Artist FROM albums")
+            artists = set()
+            for (a,) in cur.fetchall():
+                if a:
+                    for part in re.split(r"\s*(?:,|&|and)\s*", a):
+                        if part.strip():
+                            artists.add(part.strip())
+            opts = ['All'] + sorted(artists)
         elif f == 'genre':
             cur.execute("SELECT Genres FROM albums")
-            gs = set()
+            genres = set()
             for (g,) in cur.fetchall():
-                gs.update(p.strip() for p in (g or '').split(','))
-            opts = sorted(gs)
+                if g:
+                    for part in re.split(r"\s*(?:,|&|and)\s*", g):
+                        if part.strip():
+                            genres.add(part.strip())
+            opts = ['All'] + sorted(genres)
         elif f == 'decade':
             cur.execute("SELECT Release_Date FROM albums")
-            ds = set()
+            decades = set()
             for (d,) in cur.fetchall():
                 m = re.search(r"(\d{4})", str(d))
                 if m:
-                    ds.add(f"{int(m.group(1))//10*10}s")
-            opts = sorted(ds)
-        if 'All' not in opts:
-            opts.insert(0, 'All')
+                    decades.add(f"{int(m.group(1))//10*10}s")
+            opts = ['All'] + sorted(decades)
         self.filter_combo['values'] = opts
         self.filter_combo.config(state='readonly' if opts else 'disabled')
         self.filter_value.set(opts[0] if opts else '')
@@ -155,28 +162,30 @@ class AnalyticsTab:
         self.canvas.configure(scrollregion=self.canvas.bbox('all'))
 
     def on_export_clicked(self):
-        if not self.current_analysis or not hasattr(self.current_analysis, 'fig'):
+        if not self.current_analysis:
             messagebox.showwarning("No Chart", "No chart available to export.")
             return
-        base_file = filedialog.asksaveasfilename(
-            title="Export Chart and Insights",
-            defaultextension=".png",
-            filetypes=[("PNG files", "*.png"), ("All files", "*.*")]
-        )
-        if not base_file:
+    
+        export_dir = filedialog.askdirectory(title="Select Export Directory")
+        if not export_dir:
             return
-        base_path = os.path.splitext(base_file)[0]
+    
         try:
-            if hasattr(self.current_analysis, 'export_visualization'):
-                self.current_analysis.export_visualization(base_path)
-            else:
-                stats = self.current_analysis._calculate_statistics(
-                    self.current_analysis.fetch_data()
-                )
-                export_chart_and_insights(self.current_analysis.fig, stats, base_path)
-            messagebox.showinfo("Export Complete", f"Exported to:\n{base_path}.png\n{base_path}.txt")
+            # Prepare current filters
+            v = self.filter_value.get()
+            kwargs = {} if v == 'All' else {self.filter_type.get(): v}
+    
+            # Use the analytics base export method
+            base_path = self.current_analysis.export(export_dir, **kwargs)
+    
+            messagebox.showinfo(
+                "Export Complete",
+                f"Exported:\n{base_path}.png\n{base_path}.txt"
+            )
+    
         except Exception as e:
             messagebox.showerror("Export Failed", str(e))
+
 
     def show_loading_message(self, message="Working..."):
         for w in self.chart_frame.winfo_children():

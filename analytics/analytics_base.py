@@ -1,6 +1,7 @@
 import sqlite3
 import pandas as pd
 import tkinter as tk
+import re
 from tkinter import ttk
 from abc import ABC, abstractmethod
 from matplotlib.figure import Figure
@@ -87,3 +88,52 @@ class AnalyticsBase(ABC):
         df = self.fetch_data(**self.last_filters)
         stats = self._calculate_insights(df)
         export_chart_and_insights(self.fig, stats, filepath)
+
+    def export(self, export_dir: str, **kwargs) -> str:
+        """
+        Generalized export method for all analytics classes.
+        Exports the visualization figure as a PNG file and insights as a TXT file.
+        Returns the base file path (without extension).
+        """
+        import os
+
+        # Fetch the current filtered data
+        df = self.fetch_data(**kwargs)
+        if df.empty:
+            raise ValueError("No data to export for the given filters.")
+
+        # Create a fresh figure
+        fig = self.create_figure(df, **kwargs)
+        if fig is None:
+            raise ValueError("Figure creation failed, cannot export.")
+
+        # Build a meaningful filename
+        base_name = self.title.replace(' ', '_').lower()
+        
+        filters = []
+        for k, v in self.last_filters.items():
+            if v and v != 'All':
+                safe_v = re.sub(r'[\\\\/:*?"<>|]', '_', v)  # Sanitize illegal characters
+                safe_v = safe_v.replace(' ', '_').lower()   # Force lowercase and underscores
+                filters.append(f"{k}_{safe_v}")
+        
+        if filters:
+            base_name += "_" + "_".join(filters)
+        else:
+            base_name += "_all"
+        
+        # Ensure no double extension
+        base_name = os.path.splitext(base_name)[0]
+
+        file_base_path = os.path.join(export_dir, base_name)
+
+        # Save the figure
+        fig.savefig(file_base_path + ".png", dpi=300, bbox_inches='tight', facecolor=fig.get_facecolor())
+
+        # Save insights
+        insights = self._calculate_insights(df)
+        with open(file_base_path + ".txt", 'w', encoding='utf-8') as f:
+            for k, v in insights.items():
+                f.write(f"{k}: {v}\n")
+
+        return file_base_path

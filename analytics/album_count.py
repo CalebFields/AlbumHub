@@ -9,7 +9,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from analytics.analytics_base import AnalyticsBase
 from export.exporters import export_chart_and_insights
 
-class AlbumsCount(AnalyticsBase):
+class CountAlbums(AnalyticsBase):
     """
     Analyzes album distribution across artists with accurate filtering,
     normalization, and enhanced statistics (including in-depth insights).

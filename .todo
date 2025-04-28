@@ -1,11 +1,25 @@
 TODO:
-# Create analytic for album duration versus rating
-	# This means adding a new table to the database for tracklists, and displaying that info in the browser
+# Bugfix/commenting pass through
 
-# Create exporter for analytics
-	# This can be a .png and .txt with insights
+# More analytics
+
+	# Subgenre analytics
+
+		# Top subgenres by count and average ratings
+
+	# Label Analytics
+
+		# Top Labels by Count: Which record labels appear most often?
+
+		# Label Quality: Average ratings
+	
+	# Country of Release
+
+		# Top countries by count and average ratings
 
 POST 1.0:	
 # Integrate YouTube Music links
 
 # Create album guesser game
+
+# Multi-collection analytics, games, 

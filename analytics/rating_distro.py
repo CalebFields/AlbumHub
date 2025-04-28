@@ -1,97 +1,130 @@
 import sqlite3
 import pandas as pd
-import numpy as np
+import tkinter as tk
 from tkinter import ttk
 from matplotlib.figure import Figure
-from .analytics_base import AnalyticsBase
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-
+from .analytics_base import AnalyticsBase
 
 class RatingDistribution(AnalyticsBase):
     """
-    Shows a histogram of album ratings (1–10) for the selected filter.
-    Adds personalized summary below the chart.
+    Computes and visualizes the distribution of album ratings with GUI theme compliance.
     """
-    def fetch_data(self, artist: str = None, genre: str = None, decade: str = None) -> pd.Series:
-        try:
-            conn = sqlite3.connect(self.db_path)
-            df = pd.read_sql_query(
-                "SELECT Rating, Artist, Genres, Release_Date FROM albums", conn
-            )
-            conn.close()
+    def fetch_data(self, **kwargs) -> pd.DataFrame:
+        """
+        Fetch ratings, optionally filtering by artist, genre, or decade.
+        Returns a DataFrame with a 'Rating' column.
+        """
+        conn = sqlite3.connect(self.db_path)
+        df = pd.read_sql_query(
+            "SELECT Artist, Genres, Release_Date, Rating FROM albums", conn
+        )
+        conn.close()
 
-            # Convert Rating to numeric, drop NaNs
-            df['Rating'] = pd.to_numeric(df['Rating'], errors='coerce')
-            df = df.dropna(subset=['Rating'])
+        df = df.dropna(subset=['Rating'])
+        df['Rating'] = pd.to_numeric(df['Rating'], errors='coerce')
+        df = df.dropna(subset=['Rating'])
 
-            # Apply filters
-            if artist and artist != 'All':
-                df = df[df['Artist'].str.contains(artist, na=False, regex=False)]
-            if genre:
-                df = df[df['Genres'].fillna('').str.contains(genre, na=False, regex=False)]
-            if decade and decade != 'All':
-                df['year'] = pd.to_numeric(
-                    df['Release_Date'].astype(str).str.extract(r"(\d{4})")[0],
-                    errors='coerce'
-                )
-                start = int(decade.rstrip('s'))
-                df = df[df['year'].between(start, start + 9)]
+        artist = kwargs.get('artist')
+        genre = kwargs.get('genre')
+        decade = kwargs.get('decade')
 
-            # Return empty Series if no data
-            if df.empty:
-                return pd.Series(dtype=float)
+        if artist and artist != 'All':
+            df = df[df['Artist'].str.contains(artist, na=False, regex=False)]
+        if genre and genre != 'All':
+            df = df[df['Genres'].astype(str).str.contains(genre, na=False, regex=False)]
+        if decade and decade != 'All':
+            years = df['Release_Date'].astype(str).str.extract(r"(\d{4})")[0].astype(float, errors='ignore')
+            start = int(decade[:-1])
+            df = df[(years >= start) & (years < start+10)]
 
-            return df['Rating']
+        return df[['Rating']]
 
-        except Exception as e:
-            print(f"Error fetching data: {e}")
-            return pd.Series(dtype=float)
+    def create_figure(self, df: pd.DataFrame, **kwargs) -> Figure:
+        """
+        Create a themed histogram showing rating frequency distribution.
+        """
+        fig = Figure(figsize=(8, 4), constrained_layout=True)
+        ax = fig.add_subplot(111)
 
-    def create_figure(self, data: pd.Series, **kwargs) -> Figure:
-        bins = np.arange(0.5, 11.5, 1)  # Bin edges for ratings 1-10
-        fig = Figure(figsize=(8, 4))
-        ax = fig.add_subplot(1, 1, 1)
-        counts, edges, patches = ax.hist(data, bins=bins, edgecolor='black')
+        # Themed histogram
+        ax.hist(
+            df['Rating'], bins=10,
+            color='#4B72B8', edgecolor='#444444'
+        )
 
-        # Set tick positions
-        mids = (edges[:-1] + edges[1:]) / 2
-        ax.set_xticks(mids)
-        ax.set_xticklabels([str(int(m)) for m in mids])
-        ax.set_xlim(edges[0], edges[-1])
-        ax.set_ylim(bottom=0)
-        ax.set_xlabel('Rating')
-        ax.set_ylabel('Count')
-        ax.set_title(self.title)
-        ax.grid(True, axis='y', linestyle='--', alpha=0.7)  # Add gridlines for better readability
-        fig.tight_layout()
+        # Styling for dark GUI
+        fig.patch.set_facecolor('#2E2E2E')
+        ax.set_facecolor('#333333')
+        ax.grid(axis='y', color='#555555', linestyle='--', linewidth=0.5)
+        for spine in ax.spines.values():
+            spine.set_color('white')
+        ax.tick_params(colors='white')
+
+        # Labels and title in theme colors
+        ax.set_xlabel('Rating', color='white', fontsize=12)
+        ax.set_ylabel('Count', color='white', fontsize=12)
+        ax.set_title(self.title, color='white', fontsize=14, pad=10)
+
         return fig
 
-    def render(self, parent: ttk.Frame, **kwargs):
-        super().render(parent, **kwargs)
+    def _calculate_insights(self, df: pd.DataFrame) -> dict:
+        """
+        Generate distribution metrics: count, mean, median, mode, std, range, skewness, and kurtosis.
+        """
+        ratings = df['Rating']
+        total = len(ratings)
+        mean = ratings.mean()
+        median = ratings.median()
+        mode = ratings.mode().iloc[0] if not ratings.mode().empty else None
+        std = ratings.std()
+        rmin, rmax = ratings.min(), ratings.max()
+        skew = ratings.skew()
+        kurt = ratings.kurt()
 
-        # Locate stats box
-        stats_box = next(
-            (c for c in parent.winfo_children()
-             if isinstance(c, ttk.LabelFrame) and c.cget('text') == 'Additional Analysis'),
-            None
-        )
-        if stats_box is None:
-            return
+        insights = {
+            'Total Ratings': f"{total}",
+            'Mean Rating': f"{mean:.2f}",
+            'Median Rating': f"{median:.2f}",
+            'Mode Rating': f"{mode:.2f}" if mode is not None else 'N/A',
+            'Std Deviation': f"{std:.2f}",
+            'Rating Range': f"{(rmax-rmin):.2f}",
+            'Skewness': f"{skew:.2f}",
+            'Kurtosis': f"{kurt:.2f}"
+        }
+        return insights
 
-        data = self.fetch_data(**kwargs)
-        total = int(data.count())
-        avg = data.mean() if total > 0 else 0
-        common = int(data.mode()[0]) if not data.mode().empty else None
-        counts = data.value_counts() if total > 0 else pd.Series(dtype=int)
-        least = int(counts.idxmin()) if not counts.empty else None
+    def render(self, parent: ttk.Frame, **kwargs) -> Figure:
+        """
+        Render the themed distribution chart and extended insights within the Tkinter frame.
+        """
+        for w in parent.winfo_children():
+            w.destroy()
 
-        # Clear previous stats using grid_forget to avoid destroying the layout
-        for widget in stats_box.winfo_children():
-            widget.grid_forget()
+        df = self.fetch_data(**kwargs)
 
-        ttk.Label(stats_box, text=f"Total ratings: {total}").grid(anchor='w', padx=5, pady=2)
-        ttk.Label(stats_box, text=f"Average rating: {avg:.2f}").grid(anchor='w', padx=5, pady=2)
-        if common is not None:
-            ttk.Label(stats_box, text=f"Most common rating: {common}").grid(anchor='w', padx=5, pady=2)
-        if least is not None:
-            ttk.Label(stats_box, text=f"Least common rating: {least}").grid(anchor='w', padx=5, pady=2)
+        # Visualization container
+        vis = ttk.Labelframe(parent, text='Visualization')
+        vis.pack(fill=tk.BOTH, expand=False, pady=(0,5))
+        fig = self.create_figure(df, **kwargs)
+        FigureCanvasTkAgg(fig, master=vis).get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+        # Insights container
+        info = ttk.Labelframe(parent, text='Insights')
+        info.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        stats = self._calculate_insights(df)
+        cols = min(len(stats), 4)
+        for i, (k, v) in enumerate(stats.items()):
+            r, c = divmod(i, cols)
+            lbl = ttk.Label(
+                info,
+                text=f"{k}: {v}",
+                anchor='center',
+                relief='solid',
+                borderwidth=1,
+                padding=5
+            )
+            lbl.grid(row=r, column=c, sticky='nsew', padx=2, pady=2)
+            info.grid_columnconfigure(c, weight=1)
+
+        return fig

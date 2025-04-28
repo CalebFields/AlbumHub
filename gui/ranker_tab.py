@@ -1,5 +1,3 @@
-# gui/ranker_tab.py
-
 import tkinter as tk
 from tkinter import ttk, messagebox
 from tkinter.font import Font
@@ -45,9 +43,7 @@ class RankerTab:
         ctrl.pack(fill=tk.X, pady=(0,20))
         self.start_button = ttk.Button(ctrl, text="Start Tournament", command=self.start_ranking_game)
         self.start_button.pack(side=tk.LEFT, padx=5)
-        self.save_button = ttk.Button(ctrl, text="Save Results",
-                                      command=self.save_ranking_results,
-                                      state=tk.DISABLED)
+        self.save_button = ttk.Button(ctrl, text="Save Results", command=self.save_ranking_results, state=tk.DISABLED)
         self.save_button.pack(side=tk.LEFT, padx=5)
 
     def setup_filter_controls(self, parent):
@@ -56,18 +52,14 @@ class RankerTab:
 
         ttk.Label(frm, text="Rank by:").pack(side=tk.LEFT, padx=5)
         self.filter_type = tk.StringVar(value='all')
-        for txt, val in [("All Albums","all"), ("Genre","genre"),
-                         ("Artist","artist"), ("Decade","decade")]:
-            ttk.Radiobutton(frm, text=txt, variable=self.filter_type,
-                            value=val, command=self.update_filter_combo).pack(side=tk.LEFT, padx=5)
+        for txt, val in [("All Albums","all"), ("Genre","genre"), ("Artist","artist"), ("Decade","decade")]:
+            ttk.Radiobutton(frm, text=txt, variable=self.filter_type, value=val, command=self.update_filter_combo).pack(side=tk.LEFT, padx=5)
 
         self.filter_value = tk.StringVar()
-        self.filter_combo = ttk.Combobox(frm, textvariable=self.filter_value,
-                                         state='disabled', width=20)
+        self.filter_combo = ttk.Combobox(frm, textvariable=self.filter_value, state='disabled', width=20)
         self.filter_combo.pack(side=tk.LEFT, padx=5)
 
-        ttk.Button(frm, text="Apply Filter", command=self.apply_ranking_filter)\
-            .pack(side=tk.LEFT, padx=5)
+        ttk.Button(frm, text="Apply Filter", command=self.apply_ranking_filter).pack(side=tk.LEFT, padx=5)
 
         self.update_filter_combo()
 
@@ -80,15 +72,13 @@ class RankerTab:
         self.comparison_frame.rowconfigure(2, weight=0)
 
         # Left album
-        self.album1_btn = ttk.Button(self.comparison_frame,
-                                     command=lambda: self.record_choice('L'))
+        self.album1_btn = ttk.Button(self.comparison_frame, command=lambda: self.record_choice('L'))
         self.album1_btn.grid(row=0, column=0, sticky='nsew', padx=10, pady=10)
         self.album1_info = self._make_info_text(self.comparison_frame)
         self.album1_info.grid(row=1, column=0, sticky='nsew', padx=10)
 
         # Right album
-        self.album2_btn = ttk.Button(self.comparison_frame,
-                                     command=lambda: self.record_choice('R'))
+        self.album2_btn = ttk.Button(self.comparison_frame, command=lambda: self.record_choice('R'))
         self.album2_btn.grid(row=0, column=1, sticky='nsew', padx=10, pady=10)
         self.album2_info = self._make_info_text(self.comparison_frame)
         self.album2_info.grid(row=1, column=1, sticky='nsew', padx=10)
@@ -105,8 +95,7 @@ class RankerTab:
         dark_bg = self.root.cget('bg')
         style = ttk.Style()
         fg = style.lookup('TLabel','foreground',default='white')
-        txt = tk.Text(parent, wrap='word', height=4,
-                      bd=0, relief='flat', bg=dark_bg, fg=fg)
+        txt = tk.Text(parent, wrap='word', height=4, bd=0, relief='flat', bg=dark_bg, fg=fg)
         txt.tag_configure('artist', foreground='#81a1c1', font=self.bold_font)
         txt.tag_configure('title',  foreground='#eceff4')
         txt.tag_configure('rating', foreground='#a3be8c')
@@ -129,19 +118,24 @@ class RankerTab:
         f = self.filter_type.get()
         opts = ['All'] if f == 'all' else []
         if f == 'artist':
-            cur.execute("SELECT DISTINCT Artist FROM albums")
-            opts = sorted(r[0] for r in cur.fetchall() if r[0])
+            cur.execute("SELECT Artist FROM albums")
+            artists = set()
+            for (a,) in cur.fetchall():
+                if a:
+                    for part in re.split(r"\s*(?:,|&|and)\s*", a):
+                        if part.strip(): artists.add(part.strip())
+            opts = sorted(artists)
         elif f == 'genre':
             cur.execute("SELECT Genres FROM albums")
             gs = set()
             for (g,) in cur.fetchall():
-                gs.update(p.strip() for p in (g or '').split(','))
+                if g:
+                    for part in re.split(r"\s*(?:,|&|and)\s*", g):
+                        if part.strip(): gs.add(part.strip())
             opts = sorted(gs)
         elif f == 'decade':
             cur.execute("SELECT Release_Date FROM albums")
-            ds = {f"{int(m.group(1))//10*10}s"
-                  for (d,) in cur.fetchall()
-                  if (m := re.search(r"(\d{4})", str(d)))}
+            ds = {f"{int(m.group(1))//10*10}s" for (d,) in cur.fetchall() if (m := re.search(r"(\d{4})", str(d)))}
             opts = sorted(ds)
 
         self.filter_combo['values'] = opts
@@ -150,8 +144,7 @@ class RankerTab:
 
     def apply_ranking_filter(self):
         self.reset_ranking_state()
-        messagebox.showinfo("Filter Applied",
-                            f"{self.filter_type.get()} = {self.filter_value.get()}")
+        messagebox.showinfo("Filter Applied", f"{self.filter_type.get()} = {self.filter_value.get()}")
 
     def start_ranking_game(self):
         self.reset_ranking_state()
@@ -162,7 +155,7 @@ class RankerTab:
         ft, fv = self.filter_type.get(), self.filter_value.get()
         clause, params = [], []
         if ft == 'artist' and fv != 'All':
-            clause.append("Artist=?"); params.append(fv)
+            clause.append("Artist LIKE ?"); params.append(f"%{fv}%")
         if ft == 'genre' and fv != 'All':
             clause.append("Genres LIKE ?"); params.append(f"%{fv}%")
         if ft == 'decade' and fv != 'All':
@@ -180,11 +173,9 @@ class RankerTab:
         ids = [r[0] for r in rows]
         n = len(ids)
         L = math.ceil(math.log2(n)) if n > 1 else 0
-        # worst-case comparisons for mergesort = n·L - n + 1
         self.total_comparisons = n*L - n + 1 if n > 1 else 0
         self.progress_bar.config(maximum=self.total_comparisons)
 
-        # initialize merge‐sort generator
         self.sort_gen = self._mergesort(ids)
         self._advance_match()
 
@@ -210,15 +201,12 @@ class RankerTab:
         merged, i, j = [], 0, 0
         while i < len(left) and j < len(right):
             choice = yield (left[i], right[j])
-            if choice == 'L':
-                merged.append(left[i]); i += 1
-            else:
-                merged.append(right[j]); j += 1
+            if choice == 'L': merged.append(left[i]); i += 1
+            else: merged.append(right[j]); j += 1
             self.comparisons_done += 1
             self.progress_bar['value'] = self.comparisons_done
             self.progress_var.set(f"{self.comparisons_done}/{self.total_comparisons} completed")
-        merged.extend(left[i:])
-        merged.extend(right[j:])
+        merged.extend(left[i:]); merged.extend(right[j:])
         return merged
 
     def record_choice(self, choice):
@@ -227,10 +215,7 @@ class RankerTab:
     def _display_pair(self, lid, rid):
         d1 = self._fetch_album(lid)
         d2 = self._fetch_album(rid)
-        for btn, rec, info in [
-            (self.album1_btn, d1, self.album1_info),
-            (self.album2_btn, d2, self.album2_info)
-        ]:
+        for btn, rec, info in [(self.album1_btn, d1, self.album1_info), (self.album2_btn, d2, self.album2_info)]:
             img_data = rec.get('cover')
             if img_data:
                 try:
@@ -261,33 +246,23 @@ class RankerTab:
     def display_ranking_results(self):
         gui = self.app.gui
         style = ttk.Style()
-        style.configure('Dark.Treeview',
-                        background=gui.treeview_bg,
-                        fieldbackground=gui.treeview_bg,
-                        foreground=gui.light_fg)
-        style.configure('Dark.Treeview.Heading',
-                        background=gui.header_bg,
-                        foreground=gui.light_fg)
-        style.configure('Dark.TButton',
-                        background=gui.button_bg,
-                        foreground=gui.button_fg)
+        style.configure('Dark.Treeview', background=gui.treeview_bg, fieldbackground=gui.treeview_bg, foreground=gui.light_fg)
+        style.configure('Dark.Treeview.Heading', background=gui.header_bg, foreground=gui.light_fg)
+        style.configure('Dark.TButton', background=gui.button_bg, foreground=gui.button_fg)
 
         win = tk.Toplevel(self.root)
         win.title("Your Tournament Rankings")
         win.configure(bg=gui.dark_bg)
 
-        tv = ttk.Treeview(win, columns=('Album',), show='headings',
-                          style='Dark.Treeview')
+        tv = ttk.Treeview(win, columns=('Album',), show='headings', style='Dark.Treeview')
         tv.heading('Album', text='Album')
         tv.pack(fill=tk.BOTH, expand=True)
 
         for idx, aid in enumerate(self.sorted_final, 1):
             rec = self._fetch_album(aid)
-            tv.insert('', 'end',
-                      values=(f"{idx}. {rec['artist']} - {rec['title']}",))
+            tv.insert('', 'end', values=(f"{idx}. {rec['artist']} - {rec['title']}",))
 
-        ttk.Button(win, text="Close", command=win.destroy,
-                   style='Dark.TButton').pack(pady=10)
+        ttk.Button(win, text="Close", command=win.destroy, style='Dark.TButton').pack(pady=10)
 
     def save_ranking_results(self):
         # TODO: implement CSV export for self.sorted_final

@@ -60,32 +60,28 @@ class BrowserTab:
 
         style = ttk.Style(self.root)
         style.configure("Treeview",
-            font=('Helvetica', 10),
-            rowheight=70,  # match or slightly exceed thumbnail height
-            background="#333333",
-            foreground="#FFFFFF",
-            fieldbackground="#333333"
+                        font=('Helvetica', 10),
+                        rowheight=70,  # match or slightly exceed thumbnail height
+                        background="#333333",
+                        foreground="#FFFFFF",
+                        fieldbackground="#333333"
         )
         style.configure("Treeview.Heading",
-                        font=('Helvetica', 11, 'bold'),  # Smaller, bold font for headings
-                        background="#3C3F41",  # Header background color (dark)
-                        foreground="#FFFFFF",  # White text for headings
-                        padding=(5, 2)  # Padding to make headers look cleaner
+                        font=('Helvetica', 11, 'bold'),
+                        background="#3C3F41",
+                        foreground="#FFFFFF",
+                        padding=(5, 2)
         )
 
         style.map("Treeview", background=[('selected', '#4A6984')], foreground=[('selected', '#FFFFFF')])
 
-        self.tree = ttk.Treeview(
-            tree_frame,
-            show='tree headings'
-        )
+        self.tree = ttk.Treeview(tree_frame, show='tree headings')
         scrollbar = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
 
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
-        # Bind click to handle "Tracks" button clicks
         self.tree.bind('<ButtonRelease-1>', self.on_tree_click)
 
     def introspect_columns(self):
@@ -100,20 +96,16 @@ class BrowserTab:
         self.image_col = 'CoverArt' if 'CoverArt' in cols else None
         self.id_col = 'id' if 'id' in cols else None
 
-        # Determine display columns (exclude image and id) and add Tracks
         display_cols = [c for c in cols if c not in (self.image_col, self.id_col)]
         display_cols.append('Tracks')
         self.display_cols = display_cols
 
-        # Configure columns
         self.tree.config(columns=display_cols)
         self.tree.heading('#0', text=self.image_col or '')
         self.tree.column('#0', width=120, anchor='center')
 
-        # Add headings and column settings
         for col in display_cols:
-            self.tree.heading(col, text=col,
-                              command=lambda c=col: self.sort_column(c, False))
+            self.tree.heading(col, text=col, command=lambda c=col: self.sort_column(c, False))
             if col == 'Tracks':
                 self.tree.column(col, width=80, anchor='center')
             else:
@@ -126,7 +118,8 @@ class BrowserTab:
         for (a,) in cur.execute('SELECT Artist FROM albums'):
             if a:
                 for p in re.split(r'\s*(?:,|&|and)\s*', a):
-                    if p.strip(): artists.add(p.strip())
+                    if p.strip():
+                        artists.add(p.strip())
         artist_opts = ["All"] + sorted(artists)
         menu = self.artist_menu['menu']
         menu.delete(0, 'end')
@@ -138,8 +131,9 @@ class BrowserTab:
         if 'Genres' in self.all_cols:
             for (g,) in cur.execute('SELECT Genres FROM albums'):
                 if g:
-                    for part in str(g).split(','):
-                        genres.add(part.strip())
+                    for part in re.split(r'\s*(?:,|&|and)\s*', g):
+                        if part.strip():
+                            genres.add(part.strip())
         genre_opts = ["All"] + sorted(genres)
         gmenu = self.genre_menu['menu']
         gmenu.delete(0, 'end')
@@ -188,9 +182,7 @@ class BrowserTab:
                         img = tk_img
                     except:
                         img = None
-            # Insert row with Tags storing album_id
             album_id = data.get(self.id_col)
-            # Build values for display columns: last is the button label
             values = [data.get(c, '') for c in self.display_cols[:-1]] + ['View']
             if img:
                 self.tree.insert('', 'end', text='', image=img, values=values, tags=(str(album_id),))
@@ -229,7 +221,6 @@ class BrowserTab:
         cur = self.app.database.conn.cursor()
         cur.execute("SELECT track_number, title, duration_sec FROM tracklist WHERE album_id=? ORDER BY track_number", (album_id,))
         for num, title, dur in cur.fetchall():
-            # Convert duration to minutes:seconds
             minutes = dur // 60
             seconds = dur % 60
             tree.insert('', 'end', values=(num, title, f"{minutes}:{seconds:02d}"))
