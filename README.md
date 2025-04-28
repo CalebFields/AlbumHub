@@ -45,7 +45,7 @@ AlbumHub is a desktop application for managing and ranking your music album coll
    Or, manually:
 
    ```bash
-   pip install pandas requests python-dotenv Pillow
+   pip install pandas requests python-dotenv Pillow matplotlib
    ```
 
 ## Configuration
@@ -79,7 +79,7 @@ AlbumHub/
 ├── AlbumHubMain.py         # Entry point and app orchestration
 ├── .env                    # Discogs API credentials
 ├── api/
-│   └── discogs_client.py   # Discogs API integration
+│   ├── discogs_client.py   # Discogs API integration
 ├── analytics/
 │   ├── analytics_base.py   # Base class for visualizations
 │   ├── album_count.py      # Albums per artist chart
@@ -87,27 +87,28 @@ AlbumHub/
 │   ├── genre_ratings.py    # Ratings by genre
 │   ├── rating_distro.py    # Distribution of ratings
 │   ├── decade_trends.py    # Trends by decade
-│   └── __init__.py
+│   ├── duration_ratings.py # Album duration vs ratings
+│   ├── label_ratings.py    # Ratings by label
+│   ├── region_ratings.py   # Regional ratings
+│   └── subgenre_ratings.py # Subgenre breakdowns
 ├── database/
 │   └── db_manager.py       # SQLite database management
 ├── gui/
-│   ├── __init__.py         # Main GUI initialization
+│   ├── __init__.py         # GUI initialization
 │   ├── import_tab.py       # Import/enrichment tab
 │   ├── browser_tab.py      # Collection browser tab
-│   ├── ranker_tab.py       # Album ranking game tab
-│   └── analytics_tab.py    # Analytics/visualization tab
+│   ├── ranker_tab.py       # Album ranking tab
+│   ├── analytics_tab.py    # Analytics/visualization tab
+│   └── tracklist.py        # Album tracklist viewer
 ├── processing/
-│   └── data_cleaner.py     # Data loading and cleaning utilities
+│   └── data_cleaner.py     # Data cleaning and normalization
 ├── ranking/
-│   └── ranking_system.py   # Merge sort–style ranking engine
+│   └── ranking_system.py   # Merge sort–style ranking system
 ├── utilities/
-│   └── helpers.py          # Shared utilities
-├── build/                  # Build artifacts (if compiled)
-├── dist/                   # Distribution folder (if compiled)
-├── .gitignore              # Git ignored files
+│   └── helpers.py          # Shared utility functions
+├── exports/                # Folder for exported data and images
 ├── LICENSE                 # GPLv3 License
-├── requirements.txt        # Python dependencies
-└── README.md               # Project documentation
+├── README.md               # Project documentation
 ```
 
 ## Dependencies
@@ -116,20 +117,21 @@ AlbumHub/
 - **pandas** for data manipulation
 - **requests** for Discogs API calls
 - **python-dotenv** for loading environment variables
-- **Pillow** for image processing
+- **Pillow** for image handling
 - **matplotlib** for analytics visualizations
 
 ## Module Overview
 
 - **AlbumHubMain.py**: Initializes database, Discogs client, data processor, GUI, analytics, and ranking systems.
-- **discogs_client.py**: Discogs API client with rate limiting.
+- **discogs_client.py**: Discogs API client with built-in rate limiting.
 - **analytics/**: Folder of modular analytics graphs (each extend `AnalyticsBase`).
-- **data_cleaner.py**: CSV/Excel loading, data normalization.
-- **db_manager.py**: Manages schema, inserts, queries, CSV import/export.
-- **gui/**: GUI tabs (Import, Browse, Rank, Analytics).
-- **ranking_system.py**: Tournament-style ranking algorithm.
-- **helpers.py**: Utility functions (e.g., logging, string formatting).
+- **data_cleaner.py**: CSV/Excel loading, cleaning, and enrichment helpers.
+- **db_manager.py**: Manages schema creation, insertion, querying, and CSV import/export.
+- **gui/**: GUI tabs including import, browsing, ranking, and analytics.
+- **ranking_system.py**: Implements tournament-style ranking via a merge sort variant.
+- **helpers.py**: Shared utility functions.
 
 ## License
 
 This project is licensed under the GNU General Public License v3.0 (GPLv3). See [LICENSE](LICENSE) for details.
+
