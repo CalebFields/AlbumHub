@@ -59,7 +59,7 @@ class SubgenreRatings(AnalyticsBase):
         labels = df['Style'].tolist()
         wrapped_labels = [textwrap.fill(lbl, 12) for lbl in labels]
 
-        fig = Figure(figsize=(max(12, len(df) * 1.5), 6), constrained_layout=False)
+        fig = Figure(figsize=(max(12, len(df) * 0.8), 6), constrained_layout=False)
         ax = fig.add_subplot(111)
 
         bars = ax.bar(
@@ -112,13 +112,12 @@ class SubgenreRatings(AnalyticsBase):
         counts = df['count']
         ratings = df['avg_rating']
         insights['Subgenres Analyzed'] = len(df)
-        insights['Total Albums'] = int(counts.sum())
         insights['Overall Avg Rating'] = f"{ratings.mean():.2f}"
         insights['Highest Rated Subgenre'] = f"{df.iloc[0]['Style']} ({df.iloc[0]['avg_rating']:.2f})"
         insights['Lowest Rated Subgenre'] = f"{df.iloc[-1]['Style']} ({df.iloc[-1]['avg_rating']:.2f})"
         insights['Avg Albums per Subgenre'] = f"{counts.mean():.1f}"
         insights['Rating Range'] = f"{ratings.max() - ratings.min():.2f}"
-        insights['Rating Std Dev'] = f"{ratings.std():.2f}"  # New insight added
+        insights['Rating Std Dev'] = f"{ratings.std():.2f}"
 
         top5_count = df.nlargest(5, 'count')
         insights['Top 5 by Count'] = "; ".join(f"{row.Style} ({row.count})" for row in top5_count.itertuples())
@@ -132,14 +131,26 @@ class SubgenreRatings(AnalyticsBase):
 
         return insights
 
+
     def render(self, parent: ttk.Frame, **kwargs) -> Figure:
         for w in parent.winfo_children():
             w.destroy()
         df = self.fetch_data(**kwargs)
+
         vis = ttk.Labelframe(parent, text='Visualization')
         vis.pack(fill=tk.BOTH, expand=False, pady=(0,5))
+        chart_canvas = tk.Canvas(vis, bg='#2E2E2E', height=300)
+        chart_canvas.pack(fill=tk.BOTH, expand=True)
+        h_scroll = ttk.Scrollbar(vis, orient=tk.HORIZONTAL, command=chart_canvas.xview)
+        h_scroll.pack(fill=tk.X)
+        chart_canvas.configure(xscrollcommand=h_scroll.set)
+        inner = ttk.Frame(chart_canvas)
+        win = chart_canvas.create_window((0,0), window=inner, anchor='nw')
+        inner.bind('<Configure>', lambda e: chart_canvas.configure(scrollregion=chart_canvas.bbox('all')))
+        chart_canvas.bind('<Configure>', lambda e: chart_canvas.itemconfig(win, height=e.height))
         fig = self.create_figure(df, **kwargs)
-        FigureCanvasTkAgg(fig, master=vis).get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        FigureCanvasTkAgg(fig, master=inner).get_tk_widget().pack(fill=tk.BOTH)
+
         info = ttk.Labelframe(parent, text='Insights')
         info.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         stats = self._calculate_insights(df)
